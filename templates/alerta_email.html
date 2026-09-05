@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ tipo_alerta }}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #2c2c2c; background: #f0f2f5; }
+    .wrapper { max-width: 960px; margin: 24px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
+
+    /* Encabezado */
+    .header { background: #1a5276; color: #ffffff; padding: 28px 32px; }
+    .header h1 { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
+    .header .meta { font-size: 12px; opacity: 0.8; }
+
+    /* Cuerpo */
+    .body { padding: 28px 32px; }
+    .intro { margin-bottom: 24px; line-height: 1.7; color: #444; font-size: 13px; }
+
+    /* Tarjetas de resumen */
+    .summary { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; }
+    .card { flex: 1; min-width: 110px; padding: 14px 18px; border-radius: 6px; border-left: 5px solid; }
+    .card-critico { border-color: #c0392b; background: #fdf3f2; }
+    .card-alerta  { border-color: #d35400; background: #fdf6ef; }
+    .card-proximo { border-color: #b7950b; background: #fdfbea; }
+    .card-normal  { border-color: #1e8449; background: #eafaf1; }
+    .card .num    { font-size: 30px; font-weight: bold; line-height: 1; }
+    .card .lbl    { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 4px; }
+
+    /* Tabla */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    thead tr { background: #1a5276; color: #ffffff; }
+    th { padding: 11px 13px; text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 9px 13px; border-bottom: 1px solid #e8e8e8; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { filter: brightness(0.97); }
+
+    /* Filas por estado */
+    tr.critico { background: #fff5f5; }
+    tr.alerta  { background: #fff9f2; }
+    tr.proximo { background: #fffef0; }
+    tr.normal  { background: #f4fdf7; }
+
+    /* Badges de estado */
+    .badge { display: inline-block; padding: 3px 9px; border-radius: 12px; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.3px; }
+    .badge-critico { background: #c0392b; color: #fff; }
+    .badge-alerta  { background: #d35400; color: #fff; }
+    .badge-proximo { background: #b7950b; color: #fff; }
+    .badge-normal  { background: #1e8449; color: #fff; }
+
+    /* Dias restantes */
+    .dias { text-align: center; font-weight: bold; font-size: 13px; }
+
+    /* Pie de pagina */
+    .footer { padding: 18px 32px; background: #f7f8fa; border-top: 1px solid #e4e4e4; font-size: 11px; color: #999; text-align: center; line-height: 1.6; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Encabezado -->
+  <div class="header">
+    <h1>{{ tipo_alerta }}</h1>
+    <div class="meta">
+      Generado el {{ fecha_reporte }}&nbsp;&nbsp;|&nbsp;&nbsp;Total de registros: <strong>{{ total }}</strong>
+    </div>
+  </div>
+
+  <!-- Cuerpo -->
+  <div class="body">
+
+    <p class="intro">
+      Estimado equipo de Recursos Humanos,<br><br>
+      A continuacion se presentan los cursos proximos a vencer que requieren gestion inmediata.
+      Se recomienda coordinar las renovaciones con anticipacion para garantizar el cumplimiento
+      ante auditorias externas.
+    </p>
+
+    <!-- Resumen por estado -->
+    {% if resumen %}
+    <div class="summary">
+      {% if resumen.critico > 0 %}
+      <div class="card card-critico">
+        <div class="num">{{ resumen.critico }}</div>
+        <div class="lbl">Critico (&le;7 dias)</div>
+      </div>
+      {% endif %}
+      {% if resumen.alerta > 0 %}
+      <div class="card card-alerta">
+        <div class="num">{{ resumen.alerta }}</div>
+        <div class="lbl">Alerta (8-15 dias)</div>
+      </div>
+      {% endif %}
+      {% if resumen.proximo > 0 %}
+      <div class="card card-proximo">
+        <div class="num">{{ resumen.proximo }}</div>
+        <div class="lbl">Proximo (16-30 dias)</div>
+      </div>
+      {% endif %}
+      {% if resumen.normal > 0 %}
+      <div class="card card-normal">
+        <div class="num">{{ resumen.normal }}</div>
+        <div class="lbl">Normal (&gt;30 dias)</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Tabla detallada -->
+    <table>
+      <thead>
+        <tr>
+          <th>Cedula</th>
+          <th>Empleado</th>
+          <th>Area</th>
+          <th>Cargo</th>
+          <th>Curso</th>
+          <th>Vence el</th>
+          <th>Dias rest.</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registros %}
+        <tr class="{{ r.clase }}">
+          <td>{{ r.cedula }}</td>
+          <td><strong>{{ r.apellido }}, {{ r.nombre }}</strong></td>
+          <td>{{ r.area }}</td>
+          <td>{{ r.cargo }}</td>
+          <td>{{ r.curso }}</td>
+          <td>{{ r.fecha_vencimiento }}</td>
+          <td class="dias">{{ r.dias_restantes }}</td>
+          <td><span class="badge badge-{{ r.clase }}">{{ r.estado_label }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+
+  <!-- Pie -->
+  <div class="footer">
+    Este correo fue generado automaticamente por el sistema autCursos — Gestion de Cursos y Capacitaciones.<br>
+    Por favor no responder a este mensaje. Para soporte contacte al administrador del sistema.
+  </div>
+
+</div>
+</body>
+</html>

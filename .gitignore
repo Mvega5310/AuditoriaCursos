@@ -1,0 +1,13 @@
+# Secretos y configuracion local
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Base de datos y logs (datos generados, no codigo)
+db/*.db
+logs/*.log
+
+# Datos de prueba generados
+datos_prueba.xlsx
