@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmar datos leídos</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f0f2f5; color: #2c2c2c; display: flex; justify-content: center; padding: 40px 16px; }
+    .card { background: #fff; max-width: 520px; width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); overflow: hidden; }
+    .header { background: #1a5276; color: #fff; padding: 22px 28px; }
+    .header h1 { font-size: 18px; margin-bottom: 4px; }
+    .header .conf { font-size: 12px; opacity: 0.85; }
+    .body { padding: 28px; }
+    p.help { color: #666; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    label { display: block; font-size: 12px; color: #555; margin-bottom: 4px; margin-top: 14px; text-transform: uppercase; letter-spacing: 0.4px; }
+    input[type="text"], input[type="date"] { width: 100%; padding: 9px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 5px; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; color: #fff; }
+    .badge.alta { background: #1e8449; }
+    .badge.media { background: #b7950b; }
+    .badge.baja { background: #c0392b; }
+    .acciones { display: flex; gap: 10px; margin-top: 26px; }
+    button, a.cancelar { flex: 1; text-align: center; padding: 12px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; text-decoration: none; }
+    button { background: #1a5276; color: #fff; border: none; }
+    button:hover { background: #154160; }
+    a.cancelar { background: #eee; color: #444; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>Revisa los datos antes de guardar</h1>
+      <div class="conf">
+        Confianza de la lectura:
+        {% if datos.confianza >= 0.85 %}
+          <span class="badge alta">{{ "%.0f"|format(datos.confianza * 100) }}%</span>
+        {% elif datos.confianza >= 0.5 %}
+          <span class="badge media">{{ "%.0f"|format(datos.confianza * 100) }}%</span>
+        {% else %}
+          <span class="badge baja">{{ "%.0f"|format(datos.confianza * 100) }}%</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="body">
+      <p class="help">Corrige cualquier campo que la IA no haya leído bien. Cargo y área son opcionales si el empleado ya existe en la base de datos.</p>
+      <form action="{{ url_for('guardar') }}" method="post">
+        <label>Cédula</label>
+        <input type="text" name="cedula" value="{{ datos.cedula or '' }}" required>
+
+        <label>Nombre</label>
+        <input type="text" name="nombre" value="{{ datos.nombre or '' }}" required>
+
+        <label>Apellido</label>
+        <input type="text" name="apellido" value="{{ datos.apellido or '' }}" required>
+
+        <label>Cargo (opcional)</label>
+        <input type="text" name="cargo" value="">
+
+        <label>Área (opcional)</label>
+        <input type="text" name="area" value="">
+
+        <label>Curso</label>
+        <input type="text" name="curso" value="{{ datos.curso or '' }}" required>
+
+        <label>Fecha de realización</label>
+        <input type="date" name="fecha_realizacion" value="{{ datos.fecha_realizacion or '' }}">
+
+        <label>Fecha de vencimiento (déjalo vacío para calcularlo según el curso)</label>
+        <input type="date" name="fecha_vencimiento" value="{{ datos.fecha_vencimiento or '' }}">
+
+        <div class="acciones">
+          <a class="cancelar" href="{{ url_for('index') }}">Cancelar</a>
+          <button type="submit">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

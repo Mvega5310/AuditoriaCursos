@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Error {{ codigo }} · autCursos{% endblock %}
+{% block headerclass %}error{% endblock %}
+{% block header %}<h1>Algo no salió bien ({{ codigo }})</h1>{% endblock %}
+{% block body %}
+  <p class="help">{{ mensaje }}</p>
+  <a class="boton" href="{{ url_for('index') }}">Volver al inicio</a>
+{% endblock %}

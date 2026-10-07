@@ -4,10 +4,15 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # Base de datos y logs (datos generados, no codigo)
 db/*.db
+db/*.db.bak-*
 logs/*.log
+
+# Salidas generadas (correos simulados con --dry-run)
+salidas/
 
 # Datos de prueba generados
 datos_prueba.xlsx

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Ingresar · autCursos{% endblock %}
+{% block header %}<h1>Control de cursos — Acceso RRHH</h1>{% endblock %}
+{% block body %}
+  <p class="help">Ingresa la contraseña de RRHH para registrar certificados.</p>
+  <form method="post" action="{{ url_for('login') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="password">Contraseña</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required autofocus>
+    <div class="acciones"><button type="submit">Ingresar</button></div>
+  </form>
+{% endblock %}

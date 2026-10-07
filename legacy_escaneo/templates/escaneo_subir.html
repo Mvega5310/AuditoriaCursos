@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registrar curso por certificado</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f0f2f5; color: #2c2c2c; display: flex; justify-content: center; padding: 40px 16px; }
+    .card { background: #fff; max-width: 480px; width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); overflow: hidden; }
+    .header { background: #1a5276; color: #fff; padding: 22px 28px; }
+    .header h1 { font-size: 18px; }
+    .body { padding: 28px; }
+    p.help { color: #666; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    .flash { background: #fdf3f2; border-left: 4px solid #c0392b; padding: 10px 14px; font-size: 13px; margin-bottom: 18px; border-radius: 4px; }
+    input[type="file"] { width: 100%; margin-bottom: 20px; }
+    button { background: #1a5276; color: #fff; border: none; padding: 12px 20px; font-size: 14px; border-radius: 6px; cursor: pointer; width: 100%; }
+    button:hover { background: #154160; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header"><h1>Registrar curso por certificado</h1></div>
+    <div class="body">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+        {% endif %}
+      {% endwith %}
+      <p class="help">Sube la foto o el PDF del certificado. El sistema lee los datos automáticamente; los podrás revisar y corregir antes de guardar.</p>
+      <form action="{{ url_for('extraer') }}" method="post" enctype="multipart/form-data">
+        <input type="file" name="certificado" accept=".pdf,.jpg,.jpeg,.png" required>
+        <button type="submit">Leer certificado</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Curso registrado</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f0f2f5; color: #2c2c2c; display: flex; justify-content: center; padding: 40px 16px; }
+    .card { background: #fff; max-width: 480px; width: 100%; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.12); overflow: hidden; text-align: center; }
+    .header { background: #1e8449; color: #fff; padding: 22px 28px; }
+    .header h1 { font-size: 18px; }
+    .body { padding: 28px; }
+    p { color: #555; font-size: 13px; margin-bottom: 22px; line-height: 1.5; }
+    a.boton { display: inline-block; background: #1a5276; color: #fff; padding: 12px 24px; font-size: 14px; border-radius: 6px; text-decoration: none; }
+    a.boton:hover { background: #154160; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header"><h1>Curso registrado correctamente</h1></div>
+    <div class="body">
+      <p>El registro quedó guardado en la base de datos. Aparecerá en el próximo reporte de vencimientos si corresponde.</p>
+      <a class="boton" href="{{ url_for('index') }}">Registrar otro certificado</a>
+    </div>
+  </div>
+</body>
+</html>
