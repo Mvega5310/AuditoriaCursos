@@ -196,3 +196,13 @@ def test_validar_sin_guardar_no_escribe(app):
     r = _subir(c, buf, accion="validar")
     assert b"no se guard" in r.data and b"nuevos" in r.data.lower()
     assert b"Mora" not in c.get("/panel").data
+
+
+def test_importar_fechas_invalidas_no_muestran_texto_de_consola(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    vence = (date.today() + timedelta(days=5)).strftime("%d/%m/%Y")
+    buf = _xlsx({"D": [["Cedula", "Nombre", "Documento", "Fecha Vencimiento"], ["9", "Zoe Mora", "RCP", vence]]})
+    r = c.post("/importar", data={"csrf": _csrf(c, "/importar"), "archivo": (buf, "d.xlsx"),
+                                  "accion": "guardar", "fechas": "cualquier-cosa"},
+               content_type="multipart/form-data")
+    assert r.status_code == 200 and b"--fechas" not in r.data and b"Mora" in c.get("/panel").data
