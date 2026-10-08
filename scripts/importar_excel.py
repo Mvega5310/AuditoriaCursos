@@ -410,11 +410,17 @@ def _clasificar_hoja(df: pd.DataFrame) -> str:
 
 
 def _leer_hojas(ruta: Path) -> dict[str, pd.DataFrame]:
-    """Lee todas las hojas. Si el encabezado no esta en la fila 1 (titulos, logos, filas vacias arriba),
-    lo busca en las primeras 15 filas: la fila con mas columnas reconocibles."""
+    """Lee todas las hojas de un Excel (ver _hojas_desde_crudos)."""
+    return _hojas_desde_crudos(pd.read_excel(ruta, sheet_name=None, dtype=str, header=None))
+
+
+def _hojas_desde_crudos(crudos: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """Recibe cada hoja SIN encabezado (todo texto). Si el encabezado no esta en la fila 1 (titulos, logos,
+    filas vacias arriba), lo busca en las primeras 15 filas: la fila con mas columnas reconocibles.
+    Sirve igual para un Excel y para una hoja de Google Sheets."""
     conocidos = set(ALIAS_DOCUMENTOS) | set(ALIAS_EMPRESAS) | {"cargo", "documento"}
     hojas = {}
-    for nombre, crudo in pd.read_excel(ruta, sheet_name=None, dtype=str, header=None).items():
+    for nombre, crudo in crudos.items():
         crudo = crudo.dropna(how="all").dropna(axis=1, how="all")
         if crudo.empty:
             hojas[nombre] = pd.DataFrame()
@@ -440,15 +446,17 @@ def _forzar_empresa(df: pd.DataFrame, nombre: str) -> pd.DataFrame:
     return df
 
 
-def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
+def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
              empresa_defecto: str = DEFAULT_EMPRESA, verbose: bool = True,
              fechas: str = "emision", vigencia_defecto: int | None = None,
-             empresa_forzada: str | None = None, solo_validar: bool = False) -> dict:
+             empresa_forzada: str | None = None, solo_validar: bool = False,
+             hojas_crudas: dict[str, pd.DataFrame] | None = None) -> dict:
     """fechas: 'emision' (realizacion) o 'vencimiento' -- que significan las fechas de una MATRIZ.
     empresa_forzada: todo el contenido se asigna a esa empresa, ignorando la columna Empresa del archivo.
-    solo_validar: procesa todo y devuelve el resultado, pero no guarda nada."""
-    ruta = Path(ruta_excel)
-    if not ruta.exists():
+    solo_validar: procesa todo y devuelve el resultado, pero no guarda nada.
+    hojas_crudas: hojas ya leidas (p. ej. de Google Sheets) en lugar de un archivo; ruta_excel se ignora."""
+    ruta = Path(ruta_excel) if ruta_excel is not None else None
+    if hojas_crudas is None and not ruta.exists():
         raise SystemExit(f"Error: No se encuentra el archivo '{ruta}'")
     if fechas not in ("emision", "realizacion", "vencimiento"):
         raise SystemExit("--fechas debe ser 'realizacion' o 'vencimiento'")
@@ -456,7 +464,7 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
 
     if empresa_forzada:
         empresa_defecto = empresa_forzada
-    hojas = _leer_hojas(ruta)
+    hojas = _hojas_desde_crudos(hojas_crudas) if hojas_crudas is not None else _leer_hojas(ruta)
     if empresa_forzada:
         hojas = {n: _forzar_empresa(df, empresa_forzada) for n, df in hojas.items()}
     empresas, requisitos, datos = [], [], []
@@ -491,7 +499,7 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
              "sin_vencimiento": 0, "requisitos": 0, "personas_matriz": 0,
              "columnas_ignoradas": [], "hojas_ignoradas": [], "errores": []}
     if verbose:
-        print(f"Leyendo: {ruta.name}")
+        print(f"Leyendo: {ruta.name if ruta else 'hojas en memoria'}")
     for df in empresas:
         _importar_empresas(cur, df, stats)
     for nombre_hoja, modo, df in datos:

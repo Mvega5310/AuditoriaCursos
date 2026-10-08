@@ -79,6 +79,26 @@ python scripts/agregar_documento.py requisitos --empresa "Clinica Bahia SAS"    
 
 Un cargo se compara sin importar mayúsculas ni tildes. Un documento registrado sin fecha de vencimiento cuenta como presente.
 
+## Sincronización diaria con Google Sheets
+
+El cliente mantiene su lista en una hoja de Google; cada día a las **6:30** el sistema la lee (antes de las alertas de las 7:00) y actualiza
+sin duplicar, igual que con el Excel (lista, matriz y requisitos, mismas columnas). También hay un botón **Sincronizar ahora** en el menú *Google Sheets*.
+Solo **lee** la hoja; nunca la modifica. Si se borra una fila de la hoja, el documento **no** se borra del sistema.
+
+**Configuración única (administrador del sistema, ~10 min):**
+1. En https://console.cloud.google.com crea un proyecto → *APIs y servicios* → *Biblioteca* → activa **Google Sheets API**.
+2. *IAM y administración* → *Cuentas de servicio* → *Crear cuenta de servicio* (nombre `autcursos`; sin roles).
+3. En esa cuenta → *Claves* → *Agregar clave* → *JSON*. Se descarga un archivo: **no lo subas a GitHub**.
+4. En Railway (o tu `.env`) crea la variable `GOOGLE_SERVICE_ACCOUNT_JSON` y pega **todo el contenido** del archivo
+   (o ese contenido en base64 si tu panel no admite varias líneas).
+5. Reinicia la app. En el menú *Google Sheets* verás el correo de la cuenta (`...@...iam.gserviceaccount.com`).
+
+**Por cada cliente:** abre su hoja → *Compartir* → agrega ese correo como **Lector** → pega el enlace en *Google Sheets* dentro de la app.
+No uses «cualquier persona con el enlace»: la hoja trae cédulas y datos de salud. Los clientes deben haber autorizado el tratamiento de datos (Ley 1581).
+
+Las fechas se leen por su valor real, no por el texto en pantalla, así que no dependen del idioma de la hoja.
+Si algo falla (sin acceso, columnas no reconocidas, filas con datos malos) el estado y las filas afectadas se ven en esa misma pantalla.
+
 ## Agregar un documento específico (sin armar un Excel)
 
 Para que una empresa pida alertar sobre un documento que no está en el catálogo, o con un aviso propio:
@@ -134,7 +154,7 @@ scripts/migrar_v1.py        migra la base anterior
 scripts/generar_alertas.py  alertas por empresa (--dry-run)
 scheduler.py         programa las alertas (Lun-Vie 07:00, etc.)
 templates/alerta_email.html
-tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py
+tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py, tests/test_sheets.py
 ```
 
 ## Aplicación web (registro de empresas)

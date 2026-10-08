@@ -191,6 +191,11 @@ def _asegurar_columnas(conn) -> None:
         conn.execute("ALTER TABLE documentos ADD COLUMN avisar_dias INTEGER")
     if "consentimiento_en" not in columnas("empresas"):
         conn.execute("ALTER TABLE empresas ADD COLUMN consentimiento_en TEXT")
+    cols_empresa = columnas("empresas")
+    for col, tipo in (("sheet_url", "TEXT"), ("sheet_fechas", "TEXT DEFAULT 'realizacion'"), ("sheet_sync_en", "TEXT"),
+                      ("sheet_sync_estado", "TEXT"), ("sheet_sync_detalle", "TEXT")):
+        if col not in cols_empresa:
+            conn.execute(f"ALTER TABLE empresas ADD COLUMN {col} {tipo}")
     if "sector" not in columnas("tipos_documento"):
         conn.execute("ALTER TABLE tipos_documento ADD COLUMN sector TEXT NOT NULL DEFAULT 'general'")
 

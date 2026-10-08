@@ -16,7 +16,12 @@ CREATE TABLE IF NOT EXISTS empresas (
     nit     TEXT    DEFAULT '',
     sector  TEXT    DEFAULT '',
     activa  INTEGER DEFAULT 1,
-    consentimiento_en TEXT              -- aceptacion del tratamiento de datos (Ley 1581) al registrarse
+    consentimiento_en TEXT,             -- aceptacion del tratamiento de datos (Ley 1581) al registrarse
+    sheet_url         TEXT,             -- Google Sheet que se sincroniza cada dia (NULL = no usa Sheets)
+    sheet_fechas      TEXT DEFAULT 'realizacion',   -- en una matriz: realizacion | vencimiento
+    sheet_sync_en     TEXT,             -- ultima sincronizacion
+    sheet_sync_estado TEXT,             -- 'ok: ...' o 'error: ...'
+    sheet_sync_detalle TEXT             -- filas que no se pudieron leer (maximo 30)
 );
 
 -- Quien recibe las alertas de cada empresa (puede haber varios)

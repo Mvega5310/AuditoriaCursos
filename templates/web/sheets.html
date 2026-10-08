@@ -1,0 +1,42 @@
+{% extends "base.html" %}{% block titulo %}Google Sheets{% endblock %}
+{% block cuerpo %}
+<div class="card">
+  <h1>Conectar con Google Sheets</h1>
+  <p>Mantenga su lista en una hoja de Google: <b>cada día a las 6:30 a. m.</b> el sistema lee los cambios y actualiza los vencimientos <b>antes</b> de enviar las alertas de las 7:00. Use las mismas columnas que en el Excel (<a href="{{ url_for('plantilla_descarga') }}">descargar plantilla</a>).</p>
+  {% if not activo %}
+    <p class="msg error">La sincronización con Google Sheets aún no está activada en este sistema. Contacte al administrador.</p>
+  {% else %}
+  <ol>
+    <li>Abra su hoja en Google Sheets → <b>Compartir</b>.</li>
+    <li>Agregue este correo como <b>Lector</b> (solo lectura; el sistema nunca modifica su hoja):<br><code>{{ cuenta }}</code></li>
+    <li>Pegue aquí el enlace de la hoja y guarde.</li>
+  </ol>
+  <p class="mut">No active «cualquier persona con el enlace»: la hoja contiene datos personales y debe seguir privada.</p>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="guardar">
+    <label for="url">Enlace de la hoja</label>
+    <input id="url" name="url" type="url" placeholder="https://docs.google.com/spreadsheets/d/..." value="{{ e.sheet_url or '' }}" required>
+    <label for="fechas">Si es una matriz, las fechas son de…</label>
+    <select id="fechas" name="fechas">
+      <option value="realizacion" {{ 'selected' if e.sheet_fechas != 'vencimiento' }}>Realización del curso (el vencimiento se calcula con la vigencia)</option>
+      <option value="vencimiento" {{ 'selected' if e.sheet_fechas == 'vencimiento' }}>Vencimiento</option>
+    </select>
+    <button>Guardar y sincronizar ahora</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if e.sheet_url %}
+<div class="card">
+  <h2>Estado</h2>
+  {% if e.sheet_sync_en %}
+    <p class="msg {{ 'ok' if e.sheet_sync_estado.startswith('ok') else 'error' }}">{{ e.sheet_sync_estado }}</p>
+    <p class="mut">Última sincronización: {{ e.sheet_sync_en.replace('T', ' ') }}</p>
+  {% else %}<p class="mut">Aún no se ha sincronizado.</p>{% endif %}
+  {% if e.sheet_sync_detalle %}<p><b>Filas que no se pudieron usar</b> (las demás sí se guardaron):</p>
+    <ul>{% for linea in e.sheet_sync_detalle.splitlines() %}<li>{{ linea }}</li>{% endfor %}</ul>{% endif %}
+  <p class="mut">Si borra una fila de la hoja, el documento <b>no</b> se borra del sistema; solo se actualizan y agregan datos.</p>
+  <form method="post" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="sincronizar"><button>Sincronizar ahora</button></form>
+  <form method="post" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="quitar"><button class="link">Desconectar la hoja</button></form>
+</div>
+{% endif %}
+{% endblock %}

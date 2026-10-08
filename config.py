@@ -85,3 +85,10 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
 # 1 = la propia app ejecuta las alertas programadas (necesario en Railway: el volumen se une a un solo servicio)
 RUN_SCHEDULER = os.getenv("RUN_SCHEDULER", "0") == "1"
 MAX_UPLOAD_MB = 5
+
+
+# Google Sheets (sincronizacion diaria). Cuenta de servicio: pegue el JSON completo (o ese JSON en base64) en esta variable.
+# NUNCA lo suba al repositorio. Cada cliente comparte su hoja con el client_email de esa cuenta, como LECTOR.
+GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+SHEETS_MAX_FILAS = 20000        # filas maximas que se leen por hoja
+SHEETS_HORA_SYNC = (6, 30)      # antes de las alertas de las 07:00

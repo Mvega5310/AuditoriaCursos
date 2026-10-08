@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 
 import config                                                  # noqa: E402
+import sheets                                                  # noqa: E402
 import correo                                                  # noqa: E402
 from catalogo import CATALOGO                                  # noqa: E402
 from core import conectar, hoy, inicializar_db, normalizar     # noqa: E402
@@ -285,6 +286,56 @@ def create_app(overrides: dict | None = None) -> Flask:
         from plantilla import construir_plantilla
         return Response(construir_plantilla(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers={"Content-Disposition": "attachment; filename=plantilla_autcursos.xlsx"})
+
+    @app.route("/sheets", methods=["GET", "POST"])
+    @login_requerido
+    def hoja_google():
+        eid, conn = g.usuario["empresa_id"], db()
+
+        def estado():
+            return conn.execute("""SELECT sheet_url, sheet_fechas, sheet_sync_en, sheet_sync_estado, sheet_sync_detalle
+                                   FROM empresas WHERE id = ?""", (eid,)).fetchone()
+
+        if request.method == "POST":
+            accion = request.form.get("accion")
+            actual = estado()
+            if accion == "quitar":
+                conn.execute("UPDATE empresas SET sheet_url = NULL, sheet_sync_estado = NULL, sheet_sync_detalle = NULL "
+                             "WHERE id = ?", (eid,))
+                conn.commit()
+                flash("Se desconectó la hoja. Los documentos ya cargados se conservan.", "ok")
+                return redirect(url_for("hoja_google"))
+            if not sheets.configurado():
+                flash("La sincronización con Google Sheets aún no está activada. Contacte al administrador.", "error")
+                return redirect(url_for("hoja_google"))
+            if accion == "guardar":
+                url = request.form.get("url", "").strip()
+                fechas = "vencimiento" if request.form.get("fechas") == "vencimiento" else "realizacion"
+                if not sheets.extraer_id(url):
+                    flash("Eso no parece un enlace de Google Sheets (debe empezar por https://docs.google.com/spreadsheets/).", "error")
+                    return redirect(url_for("hoja_google"))
+                conn.execute("UPDATE empresas SET sheet_url = ?, sheet_fechas = ? WHERE id = ?", (url, fechas, eid))
+                conn.commit()
+            elif accion == "sincronizar":
+                if not actual["sheet_url"]:
+                    flash("Primero pegue el enlace de su hoja.", "error")
+                    return redirect(url_for("hoja_google"))
+                if actual["sheet_sync_en"]:
+                    try:
+                        hace = (datetime.now() - datetime.fromisoformat(actual["sheet_sync_en"])).total_seconds()
+                    except ValueError:
+                        hace = sheets.ESPERA_MANUAL_SEG
+                    if hace < sheets.ESPERA_MANUAL_SEG:
+                        flash("Acaba de sincronizar. Espere un minuto antes de volver a intentar.", "error")
+                        return redirect(url_for("hoja_google"))
+            else:
+                abort(400)
+            res = sheets.sincronizar_empresa(app.config["DB_PATH"], eid)
+            flash(res["estado"], "ok" if res["estado"].startswith("ok") else "error")
+            return redirect(url_for("hoja_google"))
+
+        return render_template("sheets.html", e=estado(), activo=sheets.configurado(),
+                               cuenta=sheets.email_cuenta_servicio())
 
     @app.route("/responsables", methods=["GET", "POST"])
     @login_requerido
