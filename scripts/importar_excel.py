@@ -60,6 +60,9 @@ ALIAS_DOCUMENTOS = {
     "empresa": "empresa",
     "cedula": "cedula", "documento de identidad": "cedula", "identificacion": "cedula",
     "numero de identificacion": "cedula", "cc": "cedula", "c.c.": "cedula",
+    "identificacion": "cedula", "no identificacion": "cedula", "nro identificacion": "cedula",
+    "numero identificacion": "cedula", "cedula de ciudadania": "cedula", "numero de cedula": "cedula",
+    "documento de identidad": "cedula", "doc identidad": "cedula", "id": "cedula", "cedula ciudadania": "cedula",
     "nombre": "nombre", "nombres": "nombre", "nombre completo": "nombre",
     "nombres y apellidos": "nombre", "apellidos y nombres": "nombre",
     "apellido": "apellido", "apellidos": "apellido",
@@ -99,9 +102,17 @@ def _txt(valor) -> str:
     return "" if texto.lower() in ("nan", "nat", "none") else texto
 
 
+def _canon(columna, alias: dict) -> str | None:
+    """Nombre interno de un encabezado ('Documento de Identidad' -> 'cedula') o None. Ignora puntos y simbolos."""
+    n = normalizar(columna)
+    if n in alias:
+        return alias[n]
+    return alias.get(re.sub(r"\s+", " ", re.sub(r"[.\u00b0\u00ba#:]", " ", n)).strip())
+
+
 def _renombrar(df: pd.DataFrame, alias: dict) -> pd.DataFrame:
     df = df.copy()
-    df.columns = [alias.get(normalizar(c), normalizar(c)) for c in df.columns]
+    df.columns = [_canon(c, alias) or normalizar(c) for c in df.columns]
     return df.loc[:, ~df.columns.duplicated()]
 
 
@@ -109,7 +120,7 @@ def _renombrar_conservando(df: pd.DataFrame, alias: dict) -> pd.DataFrame:
     """Como _renombrar, pero las columnas que no son de identidad conservan su texto original
     (en la matriz el encabezado ES el nombre del curso)."""
     df = df.copy()
-    df.columns = [alias.get(normalizar(c)) or str(c).strip() for c in df.columns]
+    df.columns = [_canon(c, alias) or str(c).strip() for c in df.columns]
     return df.loc[:, ~df.columns.duplicated()]
 
 
@@ -382,12 +393,36 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
 
 
 def _clasificar_hoja(df: pd.DataFrame) -> str:
-    columnas = {ALIAS_DOCUMENTOS.get(normalizar(c), normalizar(c)) for c in df.columns}
+    columnas = {_canon(c, ALIAS_DOCUMENTOS) or normalizar(c) for c in df.columns}
     if "documento" in columnas:
         return "largo"
     if "cedula" in columnas:
         return "matriz"
     return "ignorada"
+
+
+def _leer_hojas(ruta: Path) -> dict[str, pd.DataFrame]:
+    """Lee todas las hojas. Si el encabezado no esta en la fila 1 (titulos, logos, filas vacias arriba),
+    lo busca en las primeras 15 filas: la fila con mas columnas reconocibles."""
+    conocidos = set(ALIAS_DOCUMENTOS) | set(ALIAS_EMPRESAS) | {"cargo", "documento"}
+    hojas = {}
+    for nombre, crudo in pd.read_excel(ruta, sheet_name=None, dtype=str, header=None).items():
+        crudo = crudo.dropna(how="all").dropna(axis=1, how="all")
+        if crudo.empty:
+            hojas[nombre] = pd.DataFrame()
+            continue
+        mejor, puntos = 0, 0
+        for i in range(min(15, len(crudo))):
+            n = sum(1 for v in crudo.iloc[i] if _txt(v) and (normalizar(v) in conocidos or _canon(v, ALIAS_DOCUMENTOS)))
+            if n > puntos:
+                mejor, puntos = i, n
+        fila_enc = crudo.iloc[mejor]
+        df = crudo.iloc[mejor + 1:].copy()
+        df.columns = [_txt(v) or f"Columna {j + 1}" for j, v in enumerate(fila_enc)]
+        # mantiene la numeracion de filas del Excel en los mensajes de error (idx + 2)
+        df.index = crudo.index[mejor + 1:] - 1
+        hojas[nombre] = df
+    return hojas
 
 
 def _forzar_empresa(df: pd.DataFrame, nombre: str) -> pd.DataFrame:
@@ -400,9 +435,10 @@ def _forzar_empresa(df: pd.DataFrame, nombre: str) -> pd.DataFrame:
 def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
              empresa_defecto: str = DEFAULT_EMPRESA, verbose: bool = True,
              fechas: str = "emision", vigencia_defecto: int | None = None,
-             empresa_forzada: str | None = None) -> dict:
+             empresa_forzada: str | None = None, solo_validar: bool = False) -> dict:
     """fechas: 'emision' (realizacion) o 'vencimiento' -- que significan las fechas de una MATRIZ.
-    empresa_forzada: todo el contenido se asigna a esa empresa, ignorando la columna Empresa del archivo."""
+    empresa_forzada: todo el contenido se asigna a esa empresa, ignorando la columna Empresa del archivo.
+    solo_validar: procesa todo y devuelve el resultado, pero no guarda nada."""
     ruta = Path(ruta_excel)
     if not ruta.exists():
         raise SystemExit(f"Error: No se encuentra el archivo '{ruta}'")
@@ -412,12 +448,14 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
 
     if empresa_forzada:
         empresa_defecto = empresa_forzada
-    hojas = pd.read_excel(ruta, sheet_name=None, dtype=str)
+    hojas = _leer_hojas(ruta)
     if empresa_forzada:
         hojas = {n: _forzar_empresa(df, empresa_forzada) for n, df in hojas.items()}
     empresas, requisitos, datos = [], [], []
     for nombre_hoja, df in hojas.items():
         n = normalizar(nombre_hoja)
+        if n in ("instrucciones", "leeme", "ayuda") or df.empty:
+            continue
         if n == "empresas":
             empresas.append(df)
         elif n == "requisitos":
@@ -426,7 +464,12 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
             modo = _clasificar_hoja(df)
             datos.append((nombre_hoja, modo, df))
     if not (empresas or requisitos or any(m != "ignorada" for _, m, _ in datos)):
-        raise SystemExit("Error: el Excel no tiene hojas reconocibles (Documentos, Matriz, Requisitos o Empresas).")
+        vistas = "; ".join(f"hoja '{n}': {', '.join(str(c) for c in df.columns[:10])}" for n, df in hojas.items() if not df.empty)
+        raise SystemExit(
+            "No encontre una lista de documentos ni una matriz de cursos en el archivo. "
+            "Una LISTA necesita una columna 'Documento' (o 'Curso'); una MATRIZ necesita una columna 'Cedula' "
+            "(o 'Identificacion') y una de nombre. "
+            f"Columnas que encontre -> {vistas or 'el archivo esta vacio'}.")
 
     conn = conectar(db_path)
     if es_v1(conn):
@@ -452,9 +495,13 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
             stats["hojas_ignoradas"].append(nombre_hoja)
     for df in requisitos:
         _importar_requisitos(cur, df, empresa_defecto, stats)
-    conn.commit()
+    if solo_validar:
+        conn.rollback()
+    else:
+        conn.commit()
     conn.close()
 
+    stats["solo_validar"] = solo_validar
     stats["empresas"] = sorted(stats["empresas"])
     if verbose:
         print("\nImportacion completada:")

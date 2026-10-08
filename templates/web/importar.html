@@ -1,13 +1,47 @@
 {% extends "base.html" %}{% block titulo %}Importar Excel{% endblock %}
-{% block cuerpo %}<div class="card"><h1>Importar desde Excel</h1>
-<p>Suba un .xlsx con las hojas <b>Documentos</b> (una fila por documento), <b>Matriz</b> (una fila por persona, una columna por curso) y/o <b>Requisitos</b> (cargo → documentos). Todo se guarda en <b>{{ usuario.empresa }}</b>; la columna Empresa del archivo se ignora.</p>
-<form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
-<label for="archivo">Archivo (.xlsx, máx. 5 MB)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required>
-<label for="fechas">En una matriz, las fechas son de…</label><select id="fechas" name="fechas"><option value="realizacion">Realización (el vencimiento se calcula)</option><option value="vencimiento">Vencimiento</option></select>
-<button>Importar</button></form></div>
-{% if stats %}<div class="card"><h2>Resultado</h2><ul>
-<li>Documentos nuevos: {{ stats.nuevos }} · actualizados: {{ stats.actualizados }}</li>
-<li>Personas en matriz: {{ stats.personas_matriz }} · requisitos por cargo: {{ stats.requisitos }}</li>
-<li>Sin fecha de vencimiento (no generan alertas): {{ stats.sin_vencimiento }}</li></ul>
-{% if stats.errores %}<p class="msg error">Filas con error ({{ stats.errores|length }}):</p><ul>{% for e in stats.errores[:30] %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
-<p><a href="{{ url_for('panel') }}">Ver el panel</a></p></div>{% endif %}{% endblock %}
+{% block cuerpo %}
+<div class="card">
+  <h1>Importar desde Excel</h1>
+  <p>Suba el archivo que ya tiene. Solo busca <b>cursos/documentos, personas y fechas</b>; todo lo demás se ignora. Se guarda en <b>{{ usuario.empresa }}</b>.</p>
+  <p><a href="{{ url_for('plantilla_descarga') }}"><b>⬇ Descargar la plantilla de ejemplo</b></a> (con instrucciones y datos de muestra)</p>
+
+  <h2>¿Qué necesita su archivo?</h2>
+  <p>Una de estas dos formas (el nombre de la hoja no importa; se reconocen por las columnas):</p>
+  <div class="tabla"><table>
+    <tr><th></th><th>Columnas obligatorias</th><th>Ejemplo</th></tr>
+    <tr><td><b>Lista</b><br><span class="mut">una fila por documento</span></td><td>Documento (o Curso) y Fecha Vencimiento. Con Cédula = persona; sin Cédula = documento de la empresa.</td>
+        <td class="mut">Cédula, Nombre, <b>Documento</b>, <b>Fecha Vencimiento</b></td></tr>
+    <tr><td><b>Matriz</b><br><span class="mut">una fila por persona</span></td><td>Cédula (o Identificación) y Nombre. Cada curso es una columna con su fecha; la vigencia puede ir en el encabezado.</td>
+        <td class="mut"><b>Cédula</b>, <b>Nombre</b>, «RCP | 730», «Bioseguridad | 365»</td></tr>
+  </table></div>
+  <ul class="mut">
+    <li>Las columnas que sobren (teléfono, observaciones…) y los títulos encima de la tabla no estorban.</li>
+    <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
+    <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál; las demás sí se guardan.</li>
+  </ul>
+
+  <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="archivo">Archivo (.xlsx, máx. 5 MB)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required>
+    <label for="fechas">Si es una matriz, las fechas son de…</label>
+    <select id="fechas" name="fechas"><option value="realizacion">Realización del curso (el vencimiento se calcula con la vigencia)</option><option value="vencimiento">Vencimiento</option></select>
+    <button name="accion" value="validar" style="background:var(--card);color:var(--ac);border:1px solid var(--ac)">Validar sin guardar</button>
+    <button name="accion" value="guardar">Importar y guardar</button>
+  </form>
+</div>
+
+{% if stats %}<div class="card">
+  <h2>{{ 'Resultado de la validación (no se guardó nada)' if stats.solo_validar else 'Importación terminada' }}</h2>
+  <ul>
+    <li>Documentos nuevos: <b>{{ stats.nuevos }}</b> · actualizados: <b>{{ stats.actualizados }}</b></li>
+    <li>Personas en la matriz: {{ stats.personas_matriz }} · requisitos por cargo: {{ stats.requisitos }}</li>
+    <li>Sin fecha de vencimiento (se guardan pero no generan alertas): {{ stats.sin_vencimiento }}</li>
+  </ul>
+  {% if stats.columnas_ignoradas %}<p class="mut">Columnas ignoradas por no tener fechas: {{ stats.columnas_ignoradas|join(', ') }}</p>{% endif %}
+  {% if stats.hojas_ignoradas %}<p class="mut">Hojas no reconocidas (ignoradas): {{ stats.hojas_ignoradas|join(', ') }}</p>{% endif %}
+  {% if stats.errores %}<p class="msg error">Filas que no se pudieron usar ({{ stats.errores|length }}):</p>
+    <ul>{% for e in stats.errores[:40] %}<li>{{ e }}</li>{% endfor %}</ul>
+    {% if stats.errores|length > 40 %}<p class="mut">…y {{ stats.errores|length - 40 }} más.</p>{% endif %}{% endif %}
+  {% if stats.solo_validar %}<p>Si el resultado es el esperado, vuelva a subir el archivo con <b>Importar y guardar</b>.</p>
+  {% else %}<p><a href="{{ url_for('panel') }}">Ver el panel</a></p>{% endif %}
+</div>{% endif %}
+{% endblock %}

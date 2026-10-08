@@ -255,18 +255,29 @@ def create_app(overrides: dict | None = None) -> Flask:
         from scripts.importar_excel import importar
         fd, ruta = tempfile.mkstemp(suffix=".xlsx")
         os.close(fd)
+        validar = request.form.get("accion") == "validar"
         try:
             archivo.save(ruta)
             stats = importar(ruta, db_path=app.config["DB_PATH"], verbose=False,
                              fechas=request.form.get("fechas", "realizacion"),
-                             empresa_forzada=g.usuario["empresa"])
-        except (SystemExit, Exception) as exc:      # SystemExit: errores de formato del importador
-            log.warning("Importacion fallida (empresa %s): %s", g.usuario["empresa_id"], exc)
-            flash("No se pudo leer el archivo. Revise que use las hojas y columnas de la plantilla.", "error")
+                             empresa_forzada=g.usuario["empresa"], solo_validar=validar)
+        except SystemExit as exc:            # mensajes propios del importador: explican que falta
+            flash(re.sub(r"^Error:\s*", "", str(exc)), "error")
+            return render_template("importar.html", stats=None), 400
+        except Exception as exc:
+            log.warning("Importacion fallida (empresa %s): %r", g.usuario["empresa_id"], exc)
+            flash("No se pudo leer el archivo. Verifique que sea un .xlsx válido y no esté protegido con contraseña.", "error")
             return render_template("importar.html", stats=None), 400
         finally:
             Path(ruta).unlink(missing_ok=True)
         return render_template("importar.html", stats=stats)
+
+    @app.get("/plantilla.xlsx")
+    def plantilla_descarga():
+        from flask import Response
+        from plantilla import construir_plantilla
+        return Response(construir_plantilla(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": "attachment; filename=plantilla_autcursos.xlsx"})
 
     @app.route("/responsables", methods=["GET", "POST"])
     @login_requerido

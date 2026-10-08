@@ -137,3 +137,62 @@ def test_alertas_van_a_los_responsables_de_cada_empresa(app):
     ids = {r["nombre"]: r["id"] for r in con.execute("SELECT id, nombre FROM empresas")}
     assert generar_alertas.obtener_destinatarios(con, ids["Clinica A"]) == ["a@a.com"]
     assert generar_alertas.obtener_destinatarios(con, ids["Fabrica B"]) == ["b@b.com"]
+
+
+# ------------------------------------------------------------ importacion tolerante y explicada
+
+def _xlsx(filas_por_hoja):
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for nombre, filas in filas_por_hoja.items():
+        ws = wb.create_sheet(nombre)
+        for f in filas:
+            ws.append(f)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _subir(c, buf, accion="guardar"):
+    return c.post("/importar", data={"csrf": _csrf(c, "/importar"), "archivo": (buf, "d.xlsx"), "accion": accion},
+                  content_type="multipart/form-data")
+
+
+def test_plantilla_se_descarga_y_se_importa_sin_errores(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    r = c.get("/plantilla.xlsx")
+    assert r.status_code == 200 and r.data[:2] == b"PK"
+    r = _subir(c, io.BytesIO(r.data))
+    assert r.status_code == 200 and b"Filas que no se pudieron usar" not in r.data
+    panel = c.get("/panel").data
+    assert b"RCP" in panel and "Rojas".encode() in panel
+
+
+def test_encabezado_no_esta_en_la_primera_fila_y_hay_columnas_extra(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    vence = (date.today() + timedelta(days=5)).strftime("%d/%m/%Y")
+    buf = _xlsx({"Listado": [
+        ["HOSPITAL X - LISTADO DE CURSOS 2026"], [], ["", "", ""],
+        ["No. Identificación", "Nombres y Apellidos", "Teléfono", "Curso", "Fecha de Vencimiento"],
+        ["555", "Carlos Ruiz", "300 000 0000", "RCP", vence]]})
+    r = _subir(c, buf)
+    assert r.status_code == 200
+    assert b"Ruiz" in c.get("/panel").data
+
+
+def test_archivo_no_reconocible_explica_que_faltaba(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    r = _subir(c, _xlsx({"Hoja1": [["Item", "Descripcion", "Valor"], ["1", "x", "2"]]}))
+    assert r.status_code == 400
+    texto = r.data.decode()
+    assert "Documento" in texto and "Cedula" in texto and "Descripcion" in texto   # dice que falta y que encontro
+
+
+def test_validar_sin_guardar_no_escribe(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    vence = (date.today() + timedelta(days=5)).strftime("%d/%m/%Y")
+    buf = _xlsx({"D": [["Cedula", "Nombre", "Documento", "Fecha Vencimiento"], ["9", "Zoe Mora", "RCP", vence]]})
+    r = _subir(c, buf, accion="validar")
+    assert b"no se guard" in r.data and b"nuevos" in r.data.lower()
+    assert b"Mora" not in c.get("/panel").data
