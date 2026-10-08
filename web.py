@@ -82,6 +82,8 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.before_request
     def _cargar_usuario_y_csrf():
         g.usuario = None
+        if request.endpoint == "static":
+            return
         uid = session.get("uid")
         if uid:
             g.usuario = db().execute("""

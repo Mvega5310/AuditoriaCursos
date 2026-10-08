@@ -36,5 +36,5 @@
     <td class="{{ '' if h.estado == 'enviado' else 'alerta' }}">{{ {'enviado':'Enviado','error_envio':'Falló el envío','sin_registros':'Sin novedades (no se envió)','sin_destinatario':'Sin destinatarios'}.get(h.estado, h.estado) }}</td></tr>{% endfor %}</table>
   {% else %}<p class="mut">Aún no se ha enviado ninguna alerta. Horarios: diaria lun-vie 7:00 · semanal lunes 7:30 · quincenal días 1 y 15 a las 8:00 · mensual día 1 a las 8:30 (hora de Colombia).</p>{% endif %}
 </div>
-<style>.chip{padding:6px 14px;border:1px solid var(--bd);border-radius:999px;text-decoration:none;color:var(--tx)}.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}</style>
+
 {% endblock %}

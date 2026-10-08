@@ -247,3 +247,14 @@ def test_importar_trae_la_guia_en_modal(app):
     c, _ = registrar(app, "Clinica A", "a@a.com")
     r = c.get("/importar")
     assert b"<dialog" in r.data and "Cómo preparar su archivo".encode() in r.data
+
+
+def test_estaticos_y_menu_lateral(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    css = c.get("/static/app.css")
+    assert css.status_code == 200 and b"--grad" in css.data
+    html = c.get("/panel").data
+    for destino in (b'/importar', b'/alertas', b'/responsables'):
+        assert destino in html
+    assert b'class="act"' in html or b'act"' in html            # el item activo se marca
+    assert b"Tu aprendizaje, sin l" in app.test_client().get("/login").data

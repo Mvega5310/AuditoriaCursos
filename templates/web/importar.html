@@ -1,28 +1,64 @@
-{% extends "base.html" %}{% block titulo %}Importar Excel{% endblock %}
+{% extends "base.html" %}{% from "_iconos.html" import ico %}{% block titulo %}Importar Excel{% endblock %}
 {% block cuerpo %}
-<div class="card">
-  <h1>Importar desde Excel</h1>
-  <p>Suba el archivo que ya tiene; solo se leen <b>cursos/documentos, personas y fechas</b>. Se guarda en <b>{{ usuario.empresa }}</b>.</p>
-  <p style="display:flex;gap:16px;flex-wrap:wrap">
-    <button type="button" class="link" id="abrir-guia">❓ ¿Cómo preparo mi archivo?</button>
-    <a href="{{ url_for('plantilla_descarga') }}">⬇ Descargar plantilla de ejemplo</a>
-  </p>
-  <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
-    <label for="archivo">Archivo (.xlsx, máx. 5 MB)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required>
-    <label for="fechas">Si es una matriz, las fechas son de…</label>
-    <select id="fechas" name="fechas"><option value="realizacion">Realización del curso (el vencimiento se calcula con la vigencia)</option><option value="vencimiento">Vencimiento</option></select>
-    <button name="accion" value="validar" style="background:var(--card);color:var(--ac);border:1px solid var(--ac)">Validar sin guardar</button>
-    <button name="accion" value="guardar">Importar y guardar</button>
-  </form>
-</div>
+<section class="card">
+  <div class="encab">
+    <span class="icono-grande">{{ ico("excel", 36) }}</span>
+    <div>
+      <h1>Importar desde Excel</h1>
+      <p class="mut" style="margin:0 0 10px">Suba el archivo que ya tiene. Solo busca cursos/documentos, personas y fechas; todo lo demás se ignora. Se guarda en <b style="color:var(--tx)">{{ usuario.empresa }}</b>.</p>
+      <p style="margin:0;display:flex;gap:22px;flex-wrap:wrap">
+        <a class="enlace-plantilla" href="{{ url_for('plantilla_descarga') }}">{{ ico("download", 18) }} Descargar la plantilla de ejemplo</a>
+        <button type="button" class="link" id="abrir-guia">{{ ico("ayuda", 18) }} ¿Cómo preparo mi archivo?</button>
+      </p>
+    </div>
+  </div>
+</section>
 
-{% if stats %}<div class="card">
+<section class="card">
+  <div class="titulo-sec"><span class="icono-seccion">{{ ico("doc", 22) }}</span><h2>¿Qué necesita su archivo?</h2></div>
+  <p class="mut" style="margin-top:0">Una de estas dos formas (el nombre de la hoja no importa; se reconocen por las columnas):</p>
+  <div class="tabla"><table>
+    <thead><tr><th>Tipo</th><th>Columnas obligatorias</th><th>Ejemplo</th></tr></thead>
+    <tbody>
+    <tr><td><div class="tipo"><span class="icono-seccion">{{ ico("doc", 20) }}</span><div><b>Lista</b><br><span class="mut">una fila por documento</span></div></div></td>
+        <td>Documento (o Curso) y Fecha Vencimiento. Con Cédula = persona; sin Cédula = documento de la empresa.</td>
+        <td class="mut">Cédula, Nombre, <b>Documento</b>, <b>Fecha Vencimiento</b></td></tr>
+    <tr><td><div class="tipo"><span class="icono-seccion" style="color:var(--acc)">{{ ico("user", 20) }}</span><div><b>Matriz</b><br><span class="mut">una fila por persona</span></div></div></td>
+        <td>Cédula (o Identificación) y Nombre. Cada curso es una columna con su fecha; la vigencia puede ir en el encabezado.</td>
+        <td class="mut"><b>Cédula</b>, <b>Nombre</b>, «RCP | 730», «Bioseguridad | 365»</td></tr>
+    </tbody></table></div>
+  <div class="info"><span class="icono-info">{{ ico("info", 20) }}</span>
+    <ul>
+      <li>Las columnas que sobren (teléfono, observaciones…) y los títulos encima de la tabla no estorban.</li>
+      <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
+      <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál; las demás sí se guardan.</li>
+    </ul></div>
+</section>
+
+<section class="card">
+  <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <label for="archivo" style="margin-top:0">Archivo (.xlsx, máx. 5 MB)</label>
+    <div class="campo">{{ ico("clip", 20) }}<input id="archivo" name="archivo" type="file" accept=".xlsx" required></div>
+    <label for="fechas">Si es una matriz, las fechas son de…</label>
+    <div class="campo">{{ ico("calendar", 20) }}<select id="fechas" name="fechas">
+      <option value="realizacion">Realización del curso (el vencimiento se calcula con la vigencia)</option>
+      <option value="vencimiento">Vencimiento</option></select></div>
+    <div class="acciones">
+      <button class="sec" name="accion" value="validar">{{ ico("check", 20) }} Validar sin guardar</button>
+      <button name="accion" value="guardar">{{ ico("upload", 20) }} Importar y guardar</button>
+    </div>
+  </form>
+</section>
+
+{% if stats %}<section class="card">
   <h2>{{ 'Resultado de la validación (no se guardó nada)' if stats.solo_validar else 'Importación terminada' }}</h2>
-  <ul>
-    <li>Documentos nuevos: <b>{{ stats.nuevos }}</b> · actualizados: <b>{{ stats.actualizados }}</b></li>
-    <li>Personas en la matriz: {{ stats.personas_matriz }} · requisitos por cargo: {{ stats.requisitos }}</li>
-    <li>Sin fecha de vencimiento (se guardan pero no generan alertas): {{ stats.sin_vencimiento }}</li>
-  </ul>
+  <div class="kpis" style="margin-bottom:12px">
+    <div class="kpi"><b>{{ stats.nuevos }}</b>Documentos nuevos</div>
+    <div class="kpi"><b>{{ stats.actualizados }}</b>Actualizados</div>
+    <div class="kpi"><b>{{ stats.personas_matriz }}</b>Personas en la matriz</div>
+    <div class="kpi"><b>{{ stats.requisitos }}</b>Requisitos por cargo</div>
+  </div>
+  <p class="mut">Sin fecha de vencimiento (se guardan pero no generan alertas): {{ stats.sin_vencimiento }}</p>
   {% if stats.columnas_ignoradas %}<p class="mut">Columnas ignoradas por no tener fechas: {{ stats.columnas_ignoradas|join(', ') }}</p>{% endif %}
   {% if stats.hojas_ignoradas %}<p class="mut">Hojas no reconocidas (ignoradas): {{ stats.hojas_ignoradas|join(', ') }}</p>{% endif %}
   {% if stats.errores %}<p class="msg error">Filas que no se pudieron usar ({{ stats.errores|length }}):</p>
@@ -30,38 +66,29 @@
     {% if stats.errores|length > 40 %}<p class="mut">…y {{ stats.errores|length - 40 }} más.</p>{% endif %}{% endif %}
   {% if stats.solo_validar %}<p>Si el resultado es el esperado, vuelva a subir el archivo con <b>Importar y guardar</b>.</p>
   {% else %}<p><a href="{{ url_for('panel') }}">Ver el panel</a> · <a href="{{ url_for('alertas') }}">Ver las alertas</a></p>{% endif %}
-</div>{% endif %}
+</section>{% endif %}
 
 <dialog id="guia" aria-labelledby="guia-t">
   <h2 id="guia-t">Cómo preparar su archivo</h2>
   <p>Suba su Excel tal como lo tiene. El sistema busca por el <b>nombre de las columnas</b> (no importa el nombre de la hoja) y se salta lo demás. Hay dos formas válidas:</p>
   <div class="opciones">
-    <div><h3>📋 Lista</h3><p class="mut">Una fila por documento</p>
+    <div><h3>Lista</h3><p class="mut">Una fila por documento</p>
       <p><b>Necesita:</b> Documento (o Curso) y Fecha de vencimiento.</p>
       <p class="mut">Con Cédula = documento de una persona. Sin Cédula = documento de la empresa.</p></div>
-    <div><h3>🧮 Matriz</h3><p class="mut">Una fila por persona</p>
+    <div><h3>Matriz</h3><p class="mut">Una fila por persona</p>
       <p><b>Necesita:</b> Cédula y Nombre. Cada curso es una columna con su fecha.</p>
       <p class="mut">Vigencia en el encabezado: «RCP | 730».</p></div>
   </div>
   <ul>
     <li>Las columnas que sobren y los títulos sobre la tabla <b>no estorban</b>.</li>
     <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
-    <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál.</li>
     <li>Pruebe primero con <b>Validar sin guardar</b>: no cambia nada.</li>
   </ul>
-  <p><a href="{{ url_for('plantilla_descarga') }}">⬇ Descargar plantilla de ejemplo</a></p>
   <form method="dialog" class="pie">
     <label class="inline"><input type="checkbox" id="no-mas"> No volver a mostrar al entrar</label>
     <button>Entendido, continuar</button>
   </form>
 </dialog>
-<style>
-dialog{max-width:640px;width:calc(100% - 32px);border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);padding:24px}
-dialog::backdrop{background:rgba(0,0,0,.55)}
-.opciones{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
-.opciones>div{border:1px solid var(--bd);border-radius:10px;padding:4px 14px}.opciones h3{margin:10px 0 0}
-.pie{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}label.inline{display:flex;align-items:center;font-weight:400;margin:16px 0 0}
-</style>
 <script>
 (function () {
   var d = document.getElementById("guia"), k = "autcursos_guia_importar";
@@ -71,7 +98,6 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
   d.addEventListener("close", function () {
     if (document.getElementById("no-mas").checked) { try { localStorage.setItem(k, "1"); } catch (e) {} }
   });
-  if (!leer() && !document.querySelector(".msg") && {{ "false" if stats else "true" }}) abrir();   // se abre sola, salvo que ya la haya cerrado o haya un resultado/aviso
 })();
 </script>
 {% endblock %}
