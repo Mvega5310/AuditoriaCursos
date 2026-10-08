@@ -28,6 +28,7 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 
 import config                                                  # noqa: E402
+import correo                                                  # noqa: E402
 from catalogo import CATALOGO                                  # noqa: E402
 from core import conectar, hoy, inicializar_db, normalizar     # noqa: E402
 
@@ -120,7 +121,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         token = serializer.dumps(usuario_id, salt="verificar-correo")
         enlace = f"{app.config['APP_URL']}/verificar/{token}"
         app.config["ULTIMO_ENLACE"] = enlace if app.config.get("TESTING") else None
-        if not (config.GMAIL_USER and config.GMAIL_APP_PASSWORD) or app.config.get("TESTING"):
+        if not correo.proveedor() or app.config.get("TESTING"):
             log.warning("Correo no configurado: enlace de verificacion para %s -> %s", email, enlace)
             return
         from scripts.generar_alertas import enviar_email

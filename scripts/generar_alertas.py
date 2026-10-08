@@ -26,6 +26,7 @@ sys.path.insert(0, str(BASE_DIR))
 from config import (GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS)
 import core
+import correo
 from core import conectar, es_v1, hoy, dias_restantes, clasificar, normalizar
 
 # Logging a archivo y consola
@@ -152,24 +153,7 @@ def obtener_destinatarios(conn, empresa_id: int) -> list[str]:
 
 
 def enviar_email(asunto: str, html_body: str, para: list[str], copia_oculta: list[str] | None = None) -> bool:
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = asunto
-        msg["From"]    = GMAIL_USER
-        msg["To"]      = ", ".join(para)
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-        destinos = para + [c for c in (copia_oculta or []) if c not in para]
-
-        # timeout: sin limite, una falla de red dejaria el scheduler colgado indefinidamente
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-            server.sendmail(GMAIL_USER, destinos, msg.as_string())
-        return True
-    except Exception as e:
-        log.error(f"Error al enviar correo: {e}")
-        return False
+    return correo.enviar(asunto, html_body, para, copia_oculta)
 
 
 def _registrar_log(conn, tipo: str, empresa_id: int, total: int, destinatario: str,
