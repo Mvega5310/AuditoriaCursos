@@ -256,13 +256,20 @@ def create_app(overrides: dict | None = None) -> Flask:
         fd, ruta = tempfile.mkstemp(suffix=".xlsx")
         os.close(fd)
         validar = request.form.get("accion") == "validar"
+        fechas = request.form.get("fechas", "realizacion")
+        if fechas not in ("realizacion", "vencimiento"):
+            fechas = "realizacion"
         try:
             archivo.save(ruta)
             stats = importar(ruta, db_path=app.config["DB_PATH"], verbose=False,
-                             fechas=request.form.get("fechas", "realizacion"),
+                             fechas=fechas,
                              empresa_forzada=g.usuario["empresa"], solo_validar=validar)
         except SystemExit as exc:            # mensajes propios del importador: explican que falta
-            flash(re.sub(r"^Error:\s*", "", str(exc)), "error")
+            mensaje = re.sub(r"^Error:\s*", "", str(exc))
+            if "migrar_v1" in mensaje or "scripts/" in mensaje:       # instrucciones de consola: no son para el usuario web
+                log.error("Importacion bloqueada (empresa %s): %s", g.usuario["empresa_id"], mensaje)
+                mensaje = "El sistema no pudo procesar el archivo en este momento. Contacte al administrador."
+            flash(mensaje, "error")
             return render_template("importar.html", stats=None), 400
         except Exception as exc:
             log.warning("Importacion fallida (empresa %s): %r", g.usuario["empresa_id"], exc)

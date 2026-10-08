@@ -4,7 +4,7 @@ Nucleo compartido: conexion a la base de datos, fechas, estados y utilidades de 
 import re
 import sqlite3
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytz
@@ -205,8 +205,16 @@ def es_v1(conn) -> bool:
 
 # ---------------------------------------------------------------- fechas y estados
 
-def parsear_fecha(valor) -> str | None:
-    """Convierte fechas de Excel/texto a ISO. Formatos con '/' o '-' se leen dia primero (dd/mm/aaaa)."""
+_MESES = {"ene": 1, "feb": 2, "mar": 3, "abr": 4, "may": 5, "jun": 6, "jul": 7, "ago": 8,
+          "sep": 9, "set": 9, "oct": 10, "nov": 11, "dic": 12}
+_RE_FECHA_TEXTO = re.compile(r"^(\d{1,2})[\s\-/.]*(?:de\s+)?([a-z]{3,10})\.?[\s\-/.]*(?:de\s+)?(\d{2,4})$")
+
+
+def parsear_fecha(valor, serial: bool = True) -> str | None:
+    """Convierte fechas de Excel/texto a ISO. Formatos con '/' o '-' se leen dia primero (dd/mm/aaaa).
+    Tambien entiende '15-mar-26', '15 de marzo de 2026' y, si serial=True, el numero de serie de Excel
+    (celda con fecha pero formato General, p. ej. 46100). serial=False se usa para DETECTAR columnas de fechas,
+    donde un numero cualquiera (valor, consecutivo) no debe confundirse con una fecha."""
     if valor is None:
         return None
     if isinstance(valor, (datetime, date)):
@@ -214,7 +222,8 @@ def parsear_fecha(valor) -> str | None:
             return valor.strftime("%Y-%m-%d")
         except ValueError:      # pandas.NaT
             return None
-    texto = str(valor).strip().split(" ")[0].split("T")[0]
+    completo = str(valor).strip()
+    texto = completo.split(" ")[0].split("T")[0]
     if not texto or texto.lower() in ("nan", "nat", "none"):
         return None
     for fmt in FORMATOS_FECHA:
@@ -222,6 +231,16 @@ def parsear_fecha(valor) -> str | None:
             return datetime.strptime(texto, fmt).strftime("%Y-%m-%d")
         except ValueError:
             continue
+    if serial and re.fullmatch(r"\d{5}(\.\d+)?", completo) and 25569 <= float(completo) < 80000:
+        return (date(1899, 12, 30) + timedelta(days=int(float(completo)))).isoformat()
+    m = _RE_FECHA_TEXTO.match(normalizar(completo))
+    if m and m.group(2)[:3] in _MESES:
+        anio = int(m.group(3))
+        anio = anio + (2000 if anio < 70 else 1900) if anio < 100 else anio
+        try:
+            return date(anio, _MESES[m.group(2)[:3]], int(m.group(1))).isoformat()
+        except ValueError:
+            return None
     return None
 
 

@@ -60,11 +60,17 @@ ALIAS_DOCUMENTOS = {
     "empresa": "empresa",
     "cedula": "cedula", "documento de identidad": "cedula", "identificacion": "cedula",
     "numero de identificacion": "cedula", "cc": "cedula", "c.c.": "cedula",
-    "identificacion": "cedula", "no identificacion": "cedula", "nro identificacion": "cedula",
+    "no identificacion": "cedula", "nro identificacion": "cedula", "n identificacion": "cedula",
     "numero identificacion": "cedula", "cedula de ciudadania": "cedula", "numero de cedula": "cedula",
-    "documento de identidad": "cedula", "doc identidad": "cedula", "id": "cedula", "cedula ciudadania": "cedula",
+    "doc identidad": "cedula", "cedula ciudadania": "cedula", "nro de identificacion": "cedula",
+    "n de identificacion": "cedula", "no de identificacion": "cedula", "nro de cedula": "cedula",
+    "n de cedula": "cedula", "no de cedula": "cedula", "nro cedula": "cedula", "n cedula": "cedula",
+    "no cedula": "cedula", "cedula nit": "cedula", "cedula o nit": "cedula", "cedula de identidad": "cedula",
     "nombre": "nombre", "nombres": "nombre", "nombre completo": "nombre",
-    "nombres y apellidos": "nombre", "apellidos y nombres": "nombre",
+    "nombres y apellidos": "nombre", "apellidos y nombres": "nombre", "nombre y apellidos": "nombre",
+    "nombre del trabajador": "nombre", "nombre trabajador": "nombre", "trabajador": "nombre",
+    "nombre del empleado": "nombre", "empleado": "nombre", "colaborador": "nombre",
+    "nombre del colaborador": "nombre", "funcionario": "nombre", "nombre del funcionario": "nombre",
     "apellido": "apellido", "apellidos": "apellido",
     "cargo": "cargo",
     "area": "area",
@@ -74,9 +80,11 @@ ALIAS_DOCUMENTOS = {
     "referencia": "referencia", "numero": "referencia", "numero de documento": "referencia",
     "entidad": "entidad", "entidad emisora": "entidad",
     "fecha emision": "fecha_emision", "fecha de emision": "fecha_emision",
+    "fecha expedicion": "fecha_emision", "fecha de expedicion": "fecha_emision",
     "fecha realizacion": "fecha_emision", "fecha de realizacion": "fecha_emision",
     "fecha vencimiento": "fecha_vencimiento", "fecha de vencimiento": "fecha_vencimiento",
-    "vencimiento": "fecha_vencimiento",
+    "vencimiento": "fecha_vencimiento", "fecha venc": "fecha_vencimiento", "fecha de venc": "fecha_vencimiento",
+    "vence": "fecha_vencimiento", "fecha vence": "fecha_vencimiento", "fecha de expiracion": "fecha_vencimiento",
     "avisar dias": "avisar_dias", "avisar con dias": "avisar_dias", "dias de aviso": "avisar_dias",
     "preaviso": "avisar_dias", "avisar con anticipacion": "avisar_dias",
     "archivo": "archivo", "enlace": "archivo", "soporte": "archivo",
@@ -107,7 +115,7 @@ def _canon(columna, alias: dict) -> str | None:
     n = normalizar(columna)
     if n in alias:
         return alias[n]
-    return alias.get(re.sub(r"\s+", " ", re.sub(r"[.\u00b0\u00ba#:]", " ", n)).strip())
+    return alias.get(re.sub(r"\s+", " ", re.sub(r"[.\u00b0\u00ba\u00aa#:/]", " ", n)).strip())
 
 
 def _renombrar(df: pd.DataFrame, alias: dict) -> pd.DataFrame:
@@ -331,7 +339,7 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
     for col in df.columns:
         if col in reservadas:
             continue
-        if not any(parsear_fecha(_txt(v)) for v in df[col]):
+        if not any(parsear_fecha(_txt(v), serial=False) for v in df[col]):
             stats["columnas_ignoradas"].append(str(col))     # ninguna fecha: no es un curso
             continue
         m = RE_VIGENCIA_ENCABEZADO.match(str(col))
