@@ -1,0 +1,40 @@
+{% extends "base.html" %}{% block titulo %}Alertas{% endblock %}
+{% block cuerpo %}
+<div class="card">
+  <h1>Alertas por correo</h1>
+  <p class="mut">Así se ve el correo que reciben los responsables de <b>{{ usuario.empresa }}</b>. Se envía solo, y la vista previa se calcula con sus datos de hoy.</p>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+    {% for k, c in tipos.items() %}
+    <a href="{{ url_for('alertas', tipo=k) }}" class="chip {{ 'on' if k == tipo }}">{{ k|capitalize }} · {{ c.dias }} días</a>
+    {% endfor %}
+  </div>
+
+  <p><b>Se enviaría a:</b>
+    {% if destinatarios %}{{ destinatarios|join(', ') }}{% else %}<span class="critico">nadie: agregue un responsable en la sección Responsables</span>{% endif %}
+  </p>
+  <p><b>Contenido ahora:</b> {{ n_registros }} documento(s) vencidos o por vencer{% if n_faltantes %} · {{ n_faltantes }} persona(s) con documentos exigidos sin registrar{% endif %}.
+     {% if not n_registros and not n_faltantes %}<span class="mut">Con esto el correo <b>no se envía</b>: solo se envía cuando hay algo que avisar.</span>{% endif %}</p>
+
+  {% if correo_activo %}
+  <form method="post" action="{{ url_for('alerta_prueba') }}" style="margin:0">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="tipo" value="{{ tipo }}">
+    <button>Enviarme una prueba a {{ usuario.email }}</button>
+  </form>
+  {% else %}<p class="msg error">El envío de correo no está configurado en el servidor.</p>{% endif %}
+</div>
+
+<div class="card">
+  <h2>Vista previa del correo</h2>
+  <iframe title="Vista previa del correo" sandbox srcdoc="{{ html }}" style="width:100%;height:620px;border:1px solid var(--bd);border-radius:8px;background:#fff"></iframe>
+</div>
+
+<div class="card tabla">
+  <h2>Últimos envíos</h2>
+  {% if historial %}<table><tr><th>Fecha</th><th>Tipo</th><th>Documentos</th><th>Enviado a</th><th>Estado</th></tr>
+  {% for h in historial %}<tr><td>{{ h.fecha_envio }}</td><td>{{ h.tipo_alerta }}</td><td>{{ h.documentos_notificados }}</td><td>{{ h.destinatario or '—' }}</td>
+    <td class="{{ '' if h.estado == 'enviado' else 'alerta' }}">{{ {'enviado':'Enviado','error_envio':'Falló el envío','sin_registros':'Sin novedades (no se envió)','sin_destinatario':'Sin destinatarios'}.get(h.estado, h.estado) }}</td></tr>{% endfor %}</table>
+  {% else %}<p class="mut">Aún no se ha enviado ninguna alerta. Horarios: diaria lun-vie 7:00 · semanal lunes 7:30 · quincenal días 1 y 15 a las 8:00 · mensual día 1 a las 8:30 (hora de Colombia).</p>{% endif %}
+</div>
+<style>.chip{padding:6px 14px;border:1px solid var(--bd);border-radius:999px;text-decoration:none;color:var(--tx)}.chip.on{background:var(--ac);color:#fff;border-color:var(--ac)}</style>
+{% endblock %}

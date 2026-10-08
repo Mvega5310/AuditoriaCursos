@@ -2,24 +2,11 @@
 {% block cuerpo %}
 <div class="card">
   <h1>Importar desde Excel</h1>
-  <p>Suba el archivo que ya tiene. Solo busca <b>cursos/documentos, personas y fechas</b>; todo lo demás se ignora. Se guarda en <b>{{ usuario.empresa }}</b>.</p>
-  <p><a href="{{ url_for('plantilla_descarga') }}"><b>⬇ Descargar la plantilla de ejemplo</b></a> (con instrucciones y datos de muestra)</p>
-
-  <h2>¿Qué necesita su archivo?</h2>
-  <p>Una de estas dos formas (el nombre de la hoja no importa; se reconocen por las columnas):</p>
-  <div class="tabla"><table>
-    <tr><th></th><th>Columnas obligatorias</th><th>Ejemplo</th></tr>
-    <tr><td><b>Lista</b><br><span class="mut">una fila por documento</span></td><td>Documento (o Curso) y Fecha Vencimiento. Con Cédula = persona; sin Cédula = documento de la empresa.</td>
-        <td class="mut">Cédula, Nombre, <b>Documento</b>, <b>Fecha Vencimiento</b></td></tr>
-    <tr><td><b>Matriz</b><br><span class="mut">una fila por persona</span></td><td>Cédula (o Identificación) y Nombre. Cada curso es una columna con su fecha; la vigencia puede ir en el encabezado.</td>
-        <td class="mut"><b>Cédula</b>, <b>Nombre</b>, «RCP | 730», «Bioseguridad | 365»</td></tr>
-  </table></div>
-  <ul class="mut">
-    <li>Las columnas que sobren (teléfono, observaciones…) y los títulos encima de la tabla no estorban.</li>
-    <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
-    <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál; las demás sí se guardan.</li>
-  </ul>
-
+  <p>Suba el archivo que ya tiene; solo se leen <b>cursos/documentos, personas y fechas</b>. Se guarda en <b>{{ usuario.empresa }}</b>.</p>
+  <p style="display:flex;gap:16px;flex-wrap:wrap">
+    <button type="button" class="link" id="abrir-guia">❓ ¿Cómo preparo mi archivo?</button>
+    <a href="{{ url_for('plantilla_descarga') }}">⬇ Descargar plantilla de ejemplo</a>
+  </p>
   <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
     <label for="archivo">Archivo (.xlsx, máx. 5 MB)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required>
     <label for="fechas">Si es una matriz, las fechas son de…</label>
@@ -42,6 +29,49 @@
     <ul>{% for e in stats.errores[:40] %}<li>{{ e }}</li>{% endfor %}</ul>
     {% if stats.errores|length > 40 %}<p class="mut">…y {{ stats.errores|length - 40 }} más.</p>{% endif %}{% endif %}
   {% if stats.solo_validar %}<p>Si el resultado es el esperado, vuelva a subir el archivo con <b>Importar y guardar</b>.</p>
-  {% else %}<p><a href="{{ url_for('panel') }}">Ver el panel</a></p>{% endif %}
+  {% else %}<p><a href="{{ url_for('panel') }}">Ver el panel</a> · <a href="{{ url_for('alertas') }}">Ver las alertas</a></p>{% endif %}
 </div>{% endif %}
+
+<dialog id="guia" aria-labelledby="guia-t">
+  <h2 id="guia-t">Cómo preparar su archivo</h2>
+  <p>Suba su Excel tal como lo tiene. El sistema busca por el <b>nombre de las columnas</b> (no importa el nombre de la hoja) y se salta lo demás. Hay dos formas válidas:</p>
+  <div class="opciones">
+    <div><h3>📋 Lista</h3><p class="mut">Una fila por documento</p>
+      <p><b>Necesita:</b> Documento (o Curso) y Fecha de vencimiento.</p>
+      <p class="mut">Con Cédula = documento de una persona. Sin Cédula = documento de la empresa.</p></div>
+    <div><h3>🧮 Matriz</h3><p class="mut">Una fila por persona</p>
+      <p><b>Necesita:</b> Cédula y Nombre. Cada curso es una columna con su fecha.</p>
+      <p class="mut">Vigencia en el encabezado: «RCP | 730».</p></div>
+  </div>
+  <ul>
+    <li>Las columnas que sobren y los títulos sobre la tabla <b>no estorban</b>.</li>
+    <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
+    <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál.</li>
+    <li>Pruebe primero con <b>Validar sin guardar</b>: no cambia nada.</li>
+  </ul>
+  <p><a href="{{ url_for('plantilla_descarga') }}">⬇ Descargar plantilla de ejemplo</a></p>
+  <form method="dialog" class="pie">
+    <label class="inline"><input type="checkbox" id="no-mas"> No volver a mostrar al entrar</label>
+    <button>Entendido, continuar</button>
+  </form>
+</dialog>
+<style>
+dialog{max-width:640px;width:calc(100% - 32px);border:1px solid var(--bd);border-radius:12px;background:var(--card);color:var(--tx);padding:24px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.opciones{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.opciones>div{border:1px solid var(--bd);border-radius:10px;padding:4px 14px}.opciones h3{margin:10px 0 0}
+.pie{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}label.inline{display:flex;align-items:center;font-weight:400;margin:16px 0 0}
+</style>
+<script>
+(function () {
+  var d = document.getElementById("guia"), k = "autcursos_guia_importar";
+  function leer() { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function abrir() { if (d.showModal) d.showModal(); else d.setAttribute("open", ""); }
+  document.getElementById("abrir-guia").addEventListener("click", abrir);
+  d.addEventListener("close", function () {
+    if (document.getElementById("no-mas").checked) { try { localStorage.setItem(k, "1"); } catch (e) {} }
+  });
+  if (!leer() && !document.querySelector(".msg") && {{ "false" if stats else "true" }}) abrir();   // se abre sola, salvo que ya la haya cerrado o haya un resultado/aviso
+})();
+</script>
 {% endblock %}

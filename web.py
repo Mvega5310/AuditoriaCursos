@@ -286,6 +286,52 @@ def create_app(overrides: dict | None = None) -> Flask:
         return Response(construir_plantilla(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers={"Content-Disposition": "attachment; filename=plantilla_autcursos.xlsx"})
 
+    @app.get("/alertas")
+    @login_requerido
+    def alertas():
+        """Vista previa EXACTA del correo que recibirian los responsables + historial de envios."""
+        from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos, renderizar_html
+        tipo = request.args.get("tipo", "semanal")
+        if tipo not in config.ALERTAS:
+            tipo = "semanal"
+        eid, conn = g.usuario["empresa_id"], db()
+        cfg = config.ALERTAS[tipo]
+        registros = consultar_vencimientos(conn, eid, cfg["dias"])
+        faltantes = consultar_faltantes(conn, eid) if cfg.get("faltantes") else []
+        html = renderizar_html(registros, tipo, g.usuario["empresa"], faltantes)
+        destinatarios = [r["email"] for r in conn.execute(
+            "SELECT email FROM responsables WHERE empresa_id = ? AND activo = 1 ORDER BY id", (eid,))]
+        historial = conn.execute("""SELECT fecha_envio, tipo_alerta, documentos_notificados, destinatario, estado
+                                    FROM log_alertas WHERE empresa_id = ? ORDER BY id DESC LIMIT 15""", (eid,)).fetchall()
+        return render_template("alertas.html", tipo=tipo, tipos=config.ALERTAS, html=html, destinatarios=destinatarios,
+                               n_registros=len(registros), n_faltantes=len(faltantes), historial=historial,
+                               correo_activo=bool(correo.proveedor()))
+
+    @app.post("/alertas/prueba")
+    @login_requerido
+    def alerta_prueba():
+        """Envia la alerta SOLO al correo del usuario que la pide (nunca a los responsables)."""
+        from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos, renderizar_html
+        tipo = request.form.get("tipo", "semanal")
+        if tipo not in config.ALERTAS:
+            tipo = "semanal"
+        ahora, ultimo = time.time(), app.config.setdefault("ULTIMA_PRUEBA", {})
+        if ahora - ultimo.get(g.usuario["id"], 0) < 60:
+            flash("Espere un minuto antes de pedir otra prueba.", "error")
+            return redirect(url_for("alertas", tipo=tipo))
+        ultimo[g.usuario["id"]] = ahora
+        eid, conn, cfg = g.usuario["empresa_id"], db(), config.ALERTAS[tipo]
+        html = renderizar_html(consultar_vencimientos(conn, eid, cfg["dias"]), tipo, g.usuario["empresa"],
+                               consultar_faltantes(conn, eid) if cfg.get("faltantes") else [])
+        if app.config.get("TESTING"):
+            app.config["ULTIMO_CORREO_PRUEBA"] = (g.usuario["email"], html)
+            ok = True
+        else:
+            ok = correo.enviar(f"[PRUEBA] {cfg['asunto']} — {g.usuario['empresa']}", html, [g.usuario["email"]], None)
+        flash(f"Prueba enviada a {g.usuario['email']}. Revise también la carpeta de spam." if ok
+              else "No se pudo enviar la prueba. Intente más tarde.", "ok" if ok else "error")
+        return redirect(url_for("alertas", tipo=tipo))
+
     @app.route("/responsables", methods=["GET", "POST"])
     @login_requerido
     def responsables():

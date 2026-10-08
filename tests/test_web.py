@@ -206,3 +206,44 @@ def test_importar_fechas_invalidas_no_muestran_texto_de_consola(app):
                                   "accion": "guardar", "fechas": "cualquier-cosa"},
                content_type="multipart/form-data")
     assert r.status_code == 200 and b"--fechas" not in r.data and b"Mora" in c.get("/panel").data
+
+
+# ------------------------------------------------------------ alertas y guia
+
+def _con_datos(c):
+    vence = (date.today() + timedelta(days=3)).strftime("%d/%m/%Y")
+    _subir(c, _xlsx({"D": [["Cedula", "Nombre", "Documento", "Fecha Vencimiento"], ["9", "Zoe Mora", "RCP", vence]]}))
+
+
+def test_alertas_muestra_vista_previa_y_destinatarios(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    _con_datos(c)
+    r = c.get("/alertas?tipo=semanal")
+    assert r.status_code == 200
+    assert b"a@a.com" in r.data and b"Zoe Mora" in r.data and b"<iframe" in r.data
+    assert c.get("/alertas?tipo=cualquiera").status_code == 200      # tipo invalido cae al semanal
+
+
+def test_alerta_prueba_solo_va_al_usuario_y_tiene_limite(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    _con_datos(c)
+    c.post("/alertas/prueba", data={"csrf": _csrf(c, "/alertas"), "tipo": "diaria"})
+    destino, html = app.config["ULTIMO_CORREO_PRUEBA"]
+    assert destino == "a@a.com" and "Zoe Mora" in html
+    app.config.pop("ULTIMO_CORREO_PRUEBA")
+    r = c.post("/alertas/prueba", data={"csrf": _csrf(c, "/alertas"), "tipo": "diaria"}, follow_redirects=True)
+    assert "ULTIMO_CORREO_PRUEBA" not in app.config and b"Espere un minuto" in r.data
+
+
+def test_alertas_aislamiento_y_requiere_login(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    _con_datos(c)
+    otro, _ = registrar(app, "Clinica B", "b@b.com")
+    assert b"Zoe Mora" not in otro.get("/alertas").data
+    assert app.test_client().get("/alertas").status_code == 302
+
+
+def test_importar_trae_la_guia_en_modal(app):
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    r = c.get("/importar")
+    assert b"<dialog" in r.data and "Cómo preparar su archivo".encode() in r.data
