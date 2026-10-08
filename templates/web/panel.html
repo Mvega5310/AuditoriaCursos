@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% block titulo %}Panel{% endblock %}
+{% block cuerpo %}<h1>{{ usuario.empresa }}</h1><p class="mut">Estado al {{ hoy }} · {{ empleados }} empleados activos</p>
+<div class="kpis">
+<div class="kpi"><b class="vencido">{{ resumen.vencido }}</b>Vencidos</div>
+<div class="kpi"><b class="critico">{{ resumen.critico }}</b>Críticos (≤7 días)</div>
+<div class="kpi"><b class="alerta">{{ resumen.alerta }}</b>Alerta (≤15 días)</div>
+<div class="kpi"><b>{{ resumen.proximo }}</b>Próximos (≤30 días)</div></div>
+{% if not empleados and not total %}<div class="card"><p>Aún no hay datos. <a href="{{ url_for('importar_vista') }}">Importe su Excel</a> para empezar.</p></div>{% endif %}
+{% if registros %}<div class="card tabla"><h2>Vencidos y por vencer (60 días)</h2><table>
+<tr><th>Titular</th><th>Cédula</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>
+{% for r in registros %}<tr><td>{{ r.titular }}</td><td>{{ r.identificacion }}</td><td>{{ r.documento }}</td><td>{{ r.fecha_vencimiento }}</td><td class="{{ r.clase }}">{{ r.estado_label }} ({{ r.dias_texto }} d)</td></tr>{% endfor %}
+</table>{% if total > registros|length %}<p class="mut">Mostrando {{ registros|length }} de {{ total }}.</p>{% endif %}</div>{% endif %}
+{% if faltantes %}<div class="card tabla"><h2>Documentos exigidos sin registrar</h2><table><tr><th>Persona</th><th>Cédula</th><th>Faltan</th></tr>
+{% for f in faltantes %}<tr><td>{{ f.titular }}</td><td>{{ f.identificacion }}</td><td>{{ f.faltan }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% endblock %}

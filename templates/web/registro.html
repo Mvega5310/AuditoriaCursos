@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block titulo %}Registro de empresa{% endblock %}
+{% block cuerpo %}<div class="card"><h1>Registre su empresa</h1>
+<p class="mut">Controle los vencimientos de cursos, licencias, exámenes y documentos. Cada empresa ve solo su información.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
+<label for="empresa">Nombre de la empresa</label><input id="empresa" name="empresa" required value="{{ form.empresa }}">
+<label for="nit">NIT (opcional)</label><input id="nit" name="nit" value="{{ form.nit }}">
+<label for="sector">Sector</label><select id="sector" name="sector" required>
+<option value="">Seleccione…</option>{% for k, v in sectores.items() %}<option value="{{ k }}" {{ 'selected' if form.sector == k }}>{{ v }}</option>{% endfor %}</select>
+<label for="email">Correo del administrador</label><input id="email" name="email" type="email" required value="{{ form.email }}" autocomplete="email">
+<label for="password">Contraseña (mínimo 10 caracteres)</label><input id="password" name="password" type="password" required minlength="10" autocomplete="new-password">
+<label for="password2">Repita la contraseña</label><input id="password2" name="password2" type="password" required autocomplete="new-password">
+<label><input type="checkbox" name="consentimiento" value="1"> Autorizo el tratamiento de los datos personales de mis empleados con la única finalidad de controlar vencimientos (Ley 1581 de 2012). No cargaré diagnósticos ni resultados clínicos.</label>
+<button>Crear cuenta</button></form>
+<p>¿Ya tiene cuenta? <a href="{{ url_for('login') }}">Ingresar</a></p></div>{% endblock %}

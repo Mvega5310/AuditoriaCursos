@@ -1,1 +1,3 @@
+-r requirements.txt
 pytest
+pgserver    # Postgres local opcional para probar con TEST_DATABASE_URL

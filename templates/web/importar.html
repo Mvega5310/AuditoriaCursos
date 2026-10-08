@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% block titulo %}Importar Excel{% endblock %}
+{% block cuerpo %}<div class="card"><h1>Importar desde Excel</h1>
+<p>Suba un .xlsx con las hojas <b>Documentos</b> (una fila por documento), <b>Matriz</b> (una fila por persona, una columna por curso) y/o <b>Requisitos</b> (cargo → documentos). Todo se guarda en <b>{{ usuario.empresa }}</b>; la columna Empresa del archivo se ignora.</p>
+<form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">
+<label for="archivo">Archivo (.xlsx, máx. 5 MB)</label><input id="archivo" name="archivo" type="file" accept=".xlsx" required>
+<label for="fechas">En una matriz, las fechas son de…</label><select id="fechas" name="fechas"><option value="realizacion">Realización (el vencimiento se calcula)</option><option value="vencimiento">Vencimiento</option></select>
+<button>Importar</button></form></div>
+{% if stats %}<div class="card"><h2>Resultado</h2><ul>
+<li>Documentos nuevos: {{ stats.nuevos }} · actualizados: {{ stats.actualizados }}</li>
+<li>Personas en matriz: {{ stats.personas_matriz }} · requisitos por cargo: {{ stats.requisitos }}</li>
+<li>Sin fecha de vencimiento (no generan alertas): {{ stats.sin_vencimiento }}</li></ul>
+{% if stats.errores %}<p class="msg error">Filas con error ({{ stats.errores|length }}):</p><ul>{% for e in stats.errores[:30] %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+<p><a href="{{ url_for('panel') }}">Ver el panel</a></p></div>{% endif %}{% endblock %}

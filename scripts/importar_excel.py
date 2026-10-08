@@ -117,8 +117,8 @@ def _upsert_empresa(cur, nombre: str, nit: str = "", sector: str = "") -> int:
     cur.execute("""
         INSERT INTO empresas (nombre, nit, sector) VALUES (?, ?, ?)
         ON CONFLICT(nombre) DO UPDATE SET
-            nit    = COALESCE(NULLIF(excluded.nit, ''), nit),
-            sector = COALESCE(NULLIF(excluded.sector, ''), sector)
+            nit    = COALESCE(NULLIF(excluded.nit, ''), empresas.nit),
+            sector = COALESCE(NULLIF(excluded.sector, ''), empresas.sector)
     """, (nombre, nit, sector))
     return cur.execute("SELECT id FROM empresas WHERE nombre = ?", (nombre,)).fetchone()[0]
 
@@ -144,7 +144,7 @@ def _importar_empresas(cur, df: pd.DataFrame, stats: dict) -> None:
             cur.execute("""
                 INSERT INTO responsables (empresa_id, nombre, email) VALUES (?, ?, ?)
                 ON CONFLICT(empresa_id, email) DO UPDATE SET
-                    nombre = COALESCE(NULLIF(excluded.nombre, ''), nombre), activo = 1
+                    nombre = COALESCE(NULLIF(excluded.nombre, ''), responsables.nombre), activo = 1
             """, (empresa_id, responsable, email.lower()))
             stats["responsables"] += 1
 
@@ -242,8 +242,8 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
                     ON CONFLICT(empresa_id, cedula) DO UPDATE SET
                         nombre   = excluded.nombre,
                         apellido = excluded.apellido,
-                        cargo    = COALESCE(NULLIF(excluded.cargo, ''), cargo),
-                        area     = COALESCE(NULLIF(excluded.area, ''), area)
+                        cargo    = COALESCE(NULLIF(excluded.cargo, ''), empleados.cargo),
+                        area     = COALESCE(NULLIF(excluded.area, ''), empleados.area)
                 """, (empresa_id, cedula, nombre, apellido, _txt(row.get("cargo")), _txt(row.get("area"))))
                 empleado_id = cur.execute(
                     "SELECT id FROM empleados WHERE empresa_id = ? AND cedula = ?", (empresa_id, cedula)
@@ -276,7 +276,7 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
             referencia = _txt(row.get("referencia"))
             existente = cur.execute("""
                 SELECT id FROM documentos
-                WHERE empresa_id = ? AND IFNULL(empleado_id, 0) = IFNULL(?, 0)
+                WHERE empresa_id = ? AND COALESCE(empleado_id, 0) = COALESCE(?, 0)
                   AND tipo_id = ? AND referencia = ?
             """, (empresa_id, empleado_id, tipo_id, referencia)).fetchone()
 
@@ -356,8 +356,8 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
                 ON CONFLICT(empresa_id, cedula) DO UPDATE SET
                     nombre   = excluded.nombre,
                     apellido = excluded.apellido,
-                    cargo    = COALESCE(NULLIF(excluded.cargo, ''), cargo),
-                    area     = COALESCE(NULLIF(excluded.area, ''), area)
+                    cargo    = COALESCE(NULLIF(excluded.cargo, ''), empleados.cargo),
+                    area     = COALESCE(NULLIF(excluded.area, ''), empleados.area)
             """, (eid, cedula, nombre_persona, _txt(row.get("apellido")), _txt(row.get("cargo")), _txt(row.get("area"))))
             personas.add(cedula)
         for col, nombre, vigencia in plan:
@@ -390,10 +390,19 @@ def _clasificar_hoja(df: pd.DataFrame) -> str:
     return "ignorada"
 
 
+def _forzar_empresa(df: pd.DataFrame, nombre: str) -> pd.DataFrame:
+    """Reemplaza la columna Empresa por una sola: un usuario web no puede escribir en otras empresas."""
+    df = df.drop(columns=[c for c in df.columns if normalizar(c) == "empresa"])
+    df["Empresa"] = nombre
+    return df
+
+
 def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
              empresa_defecto: str = DEFAULT_EMPRESA, verbose: bool = True,
-             fechas: str = "emision", vigencia_defecto: int | None = None) -> dict:
-    """fechas: 'emision' (realizacion) o 'vencimiento' -- que significan las fechas de una MATRIZ."""
+             fechas: str = "emision", vigencia_defecto: int | None = None,
+             empresa_forzada: str | None = None) -> dict:
+    """fechas: 'emision' (realizacion) o 'vencimiento' -- que significan las fechas de una MATRIZ.
+    empresa_forzada: todo el contenido se asigna a esa empresa, ignorando la columna Empresa del archivo."""
     ruta = Path(ruta_excel)
     if not ruta.exists():
         raise SystemExit(f"Error: No se encuentra el archivo '{ruta}'")
@@ -401,7 +410,11 @@ def importar(ruta_excel: str | Path, db_path: Path | str = DB_PATH,
         raise SystemExit("--fechas debe ser 'realizacion' o 'vencimiento'")
     fechas = "emision" if fechas == "realizacion" else fechas
 
+    if empresa_forzada:
+        empresa_defecto = empresa_forzada
     hojas = pd.read_excel(ruta, sheet_name=None, dtype=str)
+    if empresa_forzada:
+        hojas = {n: _forzar_empresa(df, empresa_forzada) for n, df in hojas.items()}
     empresas, requisitos, datos = [], [], []
     for nombre_hoja, df in hojas.items():
         n = normalizar(nombre_hoja)

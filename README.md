@@ -136,3 +136,32 @@ scheduler.py         programa las alertas (Lun-Vie 07:00, etc.)
 templates/alerta_email.html
 tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py
 ```
+
+## Aplicación web (registro de empresas)
+
+`web.py` permite que cada empresa se registre, verifique su correo, inicie sesión, suba su Excel, vea su panel y gestione los
+responsables que reciben las alertas. **Cada usuario pertenece a una sola empresa** y todas las consultas se filtran por ella
+(la prueba `tests/test_web.py::test_aislamiento_entre_empresas` lo verifica; al importar, la columna *Empresa* del archivo se ignora).
+
+```bash
+set FLASK_SECRET_KEY=una-cadena-larga   # o en .env
+python web.py                            # http://localhost:8000
+```
+
+Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada desde v1):
+`python scripts/crear_usuario.py --empresa "Hospital Universitario" --email admin@hospital.com`
+
+## Base de datos: SQLite o Postgres
+
+- Sin `DATABASE_URL` se usa el archivo SQLite `db/cursos.db` (desarrollo).
+- Con `DATABASE_URL` (Railway la inyecta) se usa **Postgres**; el esquema se crea solo al arrancar. El esquema de Postgres se deriva de `db/schema.sql`.
+- Pruebas sobre Postgres: `TEST_DATABASE_URL=postgresql://... python -m pytest -q` (las marcadas `solo_sqlite` se omiten).
+- `migrar_v1.py` solo existe para SQLite.
+
+## Despliegue en Railway
+
+1. Proyecto nuevo desde este repositorio de GitHub (usa el `Dockerfile`) y un servicio **PostgreSQL** en el mismo proyecto.
+2. Variables del servicio web: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `FLASK_SECRET_KEY`, `APP_URL` (dominio público),
+   `COOKIE_SECURE=1`, `RUN_SCHEDULER=1`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `RRHH_EMAIL`, `ADMIN_EMAIL`.
+3. Generar un dominio público. Las alertas programadas corren dentro del mismo proceso (`RUN_SCHEDULER=1`), por eso el servicio debe
+   mantener **una sola réplica**.

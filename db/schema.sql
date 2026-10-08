@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     nombre  TEXT    UNIQUE NOT NULL,
     nit     TEXT    DEFAULT '',
     sector  TEXT    DEFAULT '',
-    activa  INTEGER DEFAULT 1
+    activa  INTEGER DEFAULT 1,
+    consentimiento_en TEXT              -- aceptacion del tratamiento de datos (Ley 1581) al registrarse
 );
 
 -- Quien recibe las alertas de cada empresa (puede haber varios)
@@ -77,7 +78,7 @@ CREATE TABLE IF NOT EXISTS documentos (
 
 -- Un mismo documento (empresa + titular + tipo + referencia) se actualiza, no se duplica
 CREATE UNIQUE INDEX IF NOT EXISTS ux_documentos_identidad
-    ON documentos (empresa_id, IFNULL(empleado_id, 0), tipo_id, referencia);
+    ON documentos (empresa_id, COALESCE(empleado_id, 0), tipo_id, referencia);
 
 CREATE INDEX IF NOT EXISTS ix_documentos_vencimiento ON documentos (fecha_vencimiento);
 
@@ -123,5 +124,17 @@ CREATE TABLE IF NOT EXISTS log_alertas (
     destinatario            TEXT    NOT NULL,
     estado                  TEXT    NOT NULL,   -- enviado | error_envio | sin_registros | sin_destinatario
     detalle                 TEXT    DEFAULT '',
+    FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+);
+
+-- Usuarios de la aplicacion web: cada uno pertenece a UNA empresa y solo ve sus datos
+CREATE TABLE IF NOT EXISTS usuarios (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    empresa_id     INTEGER NOT NULL,
+    email          TEXT    NOT NULL UNIQUE,
+    password_hash  TEXT    NOT NULL,
+    rol            TEXT    NOT NULL DEFAULT 'admin' CHECK (rol IN ('admin', 'usuario')),
+    verificado     INTEGER NOT NULL DEFAULT 0,
+    creado_en      TEXT    NOT NULL,
     FOREIGN KEY (empresa_id) REFERENCES empresas(id)
 );

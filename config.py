@@ -13,7 +13,8 @@ RRHH_EMAIL = os.getenv("RRHH_EMAIL")
 # Opcional: recibe copia de TODAS las alertas de TODAS las empresas (administrador del sistema)
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
 
-DB_PATH = BASE_DIR / "db" / "cursos.db"
+# En Railway apunte DB_PATH a un volumen persistente (p. ej. /data/cursos.db)
+DB_PATH = Path(os.getenv("DB_PATH") or BASE_DIR / "db" / "cursos.db")
 SCHEMA_PATH = BASE_DIR / "db" / "schema.sql"
 LOG_PATH = BASE_DIR / "logs" / "alertas.log"
 SALIDAS_DIR = BASE_DIR / "salidas"          # HTML generado con --dry-run
@@ -66,3 +67,17 @@ CATEGORIAS = {
     "afiliacion":        "Afiliación",
     "documento_empresa": "Documento de empresa",
 }
+
+
+# Postgres (Railway lo inyecta como DATABASE_URL). Si no esta definida se usa el archivo SQLite DB_PATH.
+DATABASE_URL = os.getenv("DATABASE_URL") or None
+
+# ---- Aplicacion web (registro de empresas) ----
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+# URL publica de la app (para armar el enlace de verificacion del correo)
+APP_URL = (os.getenv("APP_URL") or "http://localhost:8000").rstrip("/")
+# 1 en produccion (HTTPS): la cookie de sesion solo viaja por conexiones seguras
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
+# 1 = la propia app ejecuta las alertas programadas (necesario en Railway: el volumen se une a un solo servicio)
+RUN_SCHEDULER = os.getenv("RUN_SCHEDULER", "0") == "1"
+MAX_UPLOAD_MB = 5

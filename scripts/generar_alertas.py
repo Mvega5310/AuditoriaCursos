@@ -25,6 +25,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 from config import (GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS)
+import core
 from core import conectar, es_v1, hoy, dias_restantes, clasificar, normalizar
 
 # Logging a archivo y consola
@@ -82,28 +83,27 @@ def consultar_faltantes(conn, empresa_id: int) -> list[dict]:
 def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict]:
     """Documentos de la empresa ya vencidos o que vencen dentro de dias_limite dias.
     Excluye empleados inactivos y documentos sin fecha de vencimiento."""
-    hoy_iso = hoy().isoformat()
     hasta = (hoy() + timedelta(days=dias_limite)).isoformat()
     # Un documento con avisar_dias aparece en todas las alertas desde N dias antes de vencer,
     # aunque quede fuera de la ventana del reporte.
     filas = conn.execute("""
         SELECT e.cedula, e.nombre, e.apellido, e.area, e.cargo,
-               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento
+               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento, d.avisar_dias
         FROM documentos d
         JOIN tipos_documento t ON t.id = d.tipo_id
         LEFT JOIN empleados e  ON e.id = d.empleado_id
         WHERE d.empresa_id = ?
           AND d.fecha_vencimiento IS NOT NULL
-          AND (d.fecha_vencimiento <= ?
-               OR (d.avisar_dias IS NOT NULL
-                   AND d.fecha_vencimiento <= date(?, '+' || d.avisar_dias || ' days')))
+          AND (d.fecha_vencimiento <= ? OR d.avisar_dias IS NOT NULL)
           AND (d.empleado_id IS NULL OR e.activo = 1)
         ORDER BY d.fecha_vencimiento ASC, e.apellido ASC, e.nombre ASC
-    """, (empresa_id, hasta, hoy_iso)).fetchall()
+    """, (empresa_id, hasta)).fetchall()
 
     registros = []
     for r in filas:
         dias = dias_restantes(r["fecha_vencimiento"])
+        if r["fecha_vencimiento"] > hasta and not (r["avisar_dias"] is not None and dias <= r["avisar_dias"]):
+            continue        # fuera de la ventana y todavia sin entrar en su aviso propio
         clase, label = clasificar(dias)
         es_empresa = r["cedula"] is None
         documento = r["documento"] + (f" ({r['referencia']})" if r["referencia"] else "")
@@ -195,7 +195,7 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
         return
 
     config = ALERTAS[tipo]
-    if not Path(db_path).exists():
+    if not core.DATABASE_URL and not Path(db_path).exists():
         log.error(f"Base de datos no encontrada en {db_path}. Ejecute primero importar_excel.py")
         return
 

@@ -128,6 +128,7 @@ def test_excel_con_columna_avisar_dias(tmp_path):
     conn.close()
 
 
+@pytest.mark.solo_sqlite
 def test_base_v2_antigua_recibe_columnas_nuevas(tmp_path):
     if sqlite3.sqlite_version_info < (3, 35, 0):
         pytest.skip("DROP COLUMN requiere SQLite >= 3.35 (solo afecta a la prueba)")

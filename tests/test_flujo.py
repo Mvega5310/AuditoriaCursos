@@ -207,6 +207,7 @@ def test_formato_anterior_sigue_funcionando(tmp_path):
     conn.close()
 
 
+@pytest.mark.solo_sqlite
 def test_migracion_desde_v1(tmp_path):
     db = tmp_path / "cursos.db"
     c = sqlite3.connect(db)

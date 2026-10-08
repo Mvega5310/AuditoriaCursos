@@ -35,8 +35,8 @@ log = logging.getLogger(__name__)
 ZONA_HORARIA = "America/Bogota"
 
 
-def main() -> None:
-    scheduler = BlockingScheduler(timezone=ZONA_HORARIA)
+def registrar_jobs(scheduler) -> None:
+    """Registra las 4 alertas en un scheduler (Blocking para el script, Background para la web)."""
 
     # Alerta diaria: lunes a viernes, 07:00
     scheduler.add_job(
@@ -77,6 +77,11 @@ def main() -> None:
         name="Reporte mensual — vencen en 60 dias",
         misfire_grace_time=3600,
     )
+
+
+def main() -> None:
+    scheduler = BlockingScheduler(timezone=ZONA_HORARIA)
+    registrar_jobs(scheduler)
 
     log.info("=== autCursos Scheduler iniciado ===")
     log.info(f"  Zona horaria : {ZONA_HORARIA}")

@@ -112,7 +112,7 @@ def listar_requisitos(empresa: str | None = None, db_path: Path | str = DB_PATH)
     filas = conn.execute("""
         SELECT e.nombre AS empresa, r.cargo, t.nombre AS documento
         FROM requisitos r JOIN empresas e ON e.id = r.empresa_id JOIN tipos_documento t ON t.id = r.tipo_id
-        WHERE (? IS NULL OR lower(e.nombre) = lower(?)) ORDER BY e.nombre, r.cargo, t.nombre
+        WHERE (CAST(? AS TEXT) IS NULL OR lower(e.nombre) = lower(?)) ORDER BY e.nombre, r.cargo, t.nombre
     """, (empresa, empresa)).fetchall()
     conn.close()
     actual = None
@@ -135,7 +135,7 @@ def listar(sector: str | None = None, categoria: str | None = None, db_path: Pat
     filas = conn.execute("""
         SELECT sector, categoria, nombre, aplica_a, periodicidad_dias, norma_referencia
         FROM tipos_documento
-        WHERE (? IS NULL OR sector = ?) AND (? IS NULL OR categoria = ?)
+        WHERE (CAST(? AS TEXT) IS NULL OR sector = ?) AND (CAST(? AS TEXT) IS NULL OR categoria = ?)
         ORDER BY sector, categoria, nombre
     """, (sector and sector.lower(), sector and sector.lower(), cat, cat)).fetchall()
     conn.close()
