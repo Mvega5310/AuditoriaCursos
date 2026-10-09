@@ -94,7 +94,7 @@ def test_avisos_por_empresa(app, tmp_path, monkeypatch):
     assert not salidas.exists() or not list(salidas.glob("*hospital_z*"))            # no recibe semanal
     generar_alertas.ejecutar_alerta("quincenal", dry_run=True, db_path=app.config["DB_PATH"])
     html = (salidas / "alerta_quincenal_hospital_z.html").read_text(encoding="utf-8")
-    assert "proximos 25 dias" in html and "Cuatro" not in html and "Dos" in html     # 55 dias queda fuera
+    assert "próximos 25 días" in html and "Cuatro" not in html and "Dos" in html     # 55 dias queda fuera
 
     c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30"})   # ninguna marcada
     assert generar_alertas.configuracion_empresa(conn, eid)["activas"] == set()

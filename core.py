@@ -266,11 +266,11 @@ def clasificar(dias: int) -> tuple[str, str]:
     if dias < 0:
         return "vencido", "VENCIDO"
     if dias <= UMBRALES["critico"]:
-        return "critico", "CRITICO"
+        return "critico", "CRÍTICO"
     if dias <= UMBRALES["alerta"]:
         return "alerta", "ALERTA"
     if dias <= UMBRALES["proximo"]:
-        return "proximo", "PROXIMO"
+        return "proximo", "PRÓXIMO"
     return "normal", "NORMAL"
 
 

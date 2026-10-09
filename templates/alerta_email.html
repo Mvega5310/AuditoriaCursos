@@ -74,7 +74,7 @@
     <div class="empresa">{{ empresa }}</div>
     <h1>{{ tipo_alerta }}</h1>
     <div class="meta">
-      Generado el {{ fecha_reporte }}&nbsp;&nbsp;|&nbsp;&nbsp;Total de registros: <strong>{{ total + total_faltantes }}</strong>
+      Generado el {{ fecha_reporte }}&nbsp;&nbsp;|&nbsp;&nbsp;Vencimientos: <strong>{{ total }}</strong>{% if total_faltantes %}&nbsp;&nbsp;|&nbsp;&nbsp;Sin registrar: <strong>{{ total_faltantes }}</strong>{% endif %}
     </div>
   </div>
 
@@ -82,10 +82,10 @@
   <div class="body">
 
     <p class="intro">
-      Estimado equipo responsable de la documentacion de <strong>{{ empresa }}</strong>,<br><br>
-      A continuacion se presentan los documentos vencidos y los proximos a vencer que requieren gestion.
-      Se recomienda coordinar las renovaciones con anticipacion para garantizar el cumplimiento
-      ante auditorias, clientes y entes de control.
+      Estimado equipo responsable de la documentación de <strong>{{ empresa }}</strong>,<br><br>
+      A continuación se presentan los documentos vencidos y los próximos a vencer que requieren gestión.
+      Se recomienda coordinar las renovaciones con anticipación para garantizar el cumplimiento
+      ante auditorías, clientes y entes de control.
     </p>
 
     <!-- Resumen por estado -->
@@ -99,25 +99,25 @@
       {% if resumen.critico > 0 %}
       <div class="card card-critico">
         <div class="num">{{ resumen.critico }}</div>
-        <div class="lbl">Critico (0-7 dias)</div>
+        <div class="lbl">Crítico (0-7 días)</div>
       </div>
       {% endif %}
       {% if resumen.alerta > 0 %}
       <div class="card card-alerta">
         <div class="num">{{ resumen.alerta }}</div>
-        <div class="lbl">Alerta (8-15 dias)</div>
+        <div class="lbl">Alerta (8-15 días)</div>
       </div>
       {% endif %}
       {% if resumen.proximo > 0 %}
       <div class="card card-proximo">
         <div class="num">{{ resumen.proximo }}</div>
-        <div class="lbl">Proximo (16-30 dias)</div>
+        <div class="lbl">Próximo (16-30 días)</div>
       </div>
       {% endif %}
       {% if resumen.normal > 0 %}
       <div class="card card-normal">
         <div class="num">{{ resumen.normal }}</div>
-        <div class="lbl">Normal (&gt;30 dias)</div>
+        <div class="lbl">Normal (&gt;30 días)</div>
       </div>
       {% endif %}
       {% if total_faltantes > 0 %}
@@ -134,12 +134,12 @@
       <thead>
         <tr>
           <th>Titular</th>
-          <th>Cedula</th>
-          <th>Area / Cargo</th>
-          <th>Categoria</th>
+          <th>Cédula</th>
+          <th>Área / Cargo</th>
+          <th>Categoría</th>
           <th>Documento</th>
           <th>Vence el</th>
-          <th>Dias</th>
+          <th>Días</th>
           <th>Estado</th>
         </tr>
       </thead>
@@ -165,7 +165,7 @@
     <p class="faltantes">Estas personas no tienen registrado el documento (nunca se ha cargado). Verifique si no lo han realizado o falta cargarlo.</p>
     <table class="falt">
       <thead>
-        <tr><th>Titular</th><th>Cedula</th><th>Area / Cargo</th><th>Faltan</th><th>Cant.</th></tr>
+        <tr><th>Titular</th><th>Cédula</th><th>Área / Cargo</th><th>Faltan</th><th>Cant.</th></tr>
       </thead>
       <tbody>
         {% for f in faltantes %}
@@ -185,7 +185,7 @@
 
   <!-- Pie -->
   <div class="footer">
-    Este correo fue generado automaticamente por el sistema autCursos — Control de vencimientos de documentacion.<br>
+    Este correo fue generado automáticamente por el sistema autCursos — Control de vencimientos de documentación.<br>
     Contiene datos personales: no lo reenvie fuera de las personas responsables.
     Por favor no responder a este mensaje. Para soporte contacte al administrador del sistema.
   </div>

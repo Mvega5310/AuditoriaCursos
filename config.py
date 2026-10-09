@@ -47,29 +47,29 @@ ALERTAS = {
         "ventana_fija": 7,
         "faltantes": False,   # la diaria solo trae lo urgente
         "nombre": "Diaria (lunes a viernes)",
-        "asunto": "[URGENTE] Documentos vencidos o por vencer en {dias} dias o menos",
-        "label": "Alerta Diaria — Vencidos y por vencer en {dias} dias o menos",
+        "asunto": "[URGENTE] Documentos vencidos o por vencer en {dias} días o menos",
+        "label": "Alerta Diaria — Vencidos y por vencer en {dias} días o menos",
     },
     "semanal": {
         "periodo": 7,
         "faltantes": True,
         "nombre": "Semanal (lunes)",
-        "asunto": "Reporte Semanal — Documentos vencidos y proximos a vencer",
-        "label": "Reporte Semanal — Vencidos y por vencer en los proximos {dias} dias",
+        "asunto": "Reporte Semanal — Documentos vencidos y próximos a vencer",
+        "label": "Reporte Semanal — Vencidos y por vencer en los próximos {dias} días",
     },
     "quincenal": {
         "periodo": 15,
         "faltantes": True,
         "nombre": "Quincenal (días 1 y 15)",
-        "asunto": "Reporte Quincenal — Documentos vencidos y proximos a vencer",
-        "label": "Reporte Quincenal — Vencidos y por vencer en los proximos {dias} dias",
+        "asunto": "Reporte Quincenal — Documentos vencidos y próximos a vencer",
+        "label": "Reporte Quincenal — Vencidos y por vencer en los próximos {dias} días",
     },
     "mensual": {
         "periodo": 30,
         "faltantes": True,
         "nombre": "Mensual (día 1 de cada mes)",
         "asunto": "Reporte Mensual — Panorama de vencimientos",
-        "label": "Reporte Mensual — Vencidos y por vencer en los proximos {dias} dias",
+        "label": "Reporte Mensual — Vencidos y por vencer en los próximos {dias} días",
     },
 }
 
