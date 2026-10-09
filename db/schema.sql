@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS empresas (
     sheet_fechas      TEXT DEFAULT 'realizacion',   -- en una matriz: realizacion | vencimiento
     sheet_sync_en     TEXT,             -- ultima sincronizacion
     sheet_sync_estado TEXT,             -- 'ok: ...' o 'error: ...'
-    sheet_sync_detalle TEXT             -- filas que no se pudieron leer (maximo 30)
+    sheet_sync_detalle TEXT,            -- filas que no se pudieron leer
+    cursos_controlados TEXT,            -- una matriz: solo estos cursos (uno por linea; vacio = todos los que tengan fechas)
+    exigir_cursos      INTEGER NOT NULL DEFAULT 0   -- 1 = cada cargo debe tener los cursos controlados de su hoja (salvo los marcados N/A)
 );
 
 -- Quien recibe las alertas de cada empresa (puede haber varios)
@@ -72,6 +74,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     entidad_emisora    TEXT    DEFAULT '',
     fecha_emision      TEXT,
     fecha_vencimiento  TEXT,                    -- NULL = sin vencimiento
+    no_aplica          INTEGER NOT NULL DEFAULT 0,   -- 1 = el documento no aplica a esta persona (cuenta como cumplido)
     avisar_dias        INTEGER,                 -- NULL = solo las ventanas normales; N = aparece en TODAS las alertas desde N dias antes
     archivo            TEXT    DEFAULT '',      -- ruta o enlace al soporte (PDF/foto)
     observaciones      TEXT    DEFAULT '',

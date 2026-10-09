@@ -140,6 +140,19 @@ def leer_hojas(sheet_id: str, sesion=None) -> dict[str, pd.DataFrame]:
     return hojas_desde_respuesta(r.json())
 
 
+# ------------------------------------------------------------------ opciones por empresa
+def lineas_cursos(texto: str | None) -> list[str]:
+    """'BLS\nACLS; Duelo' -> ['BLS', 'ACLS', 'Duelo']"""
+    return [x.strip() for x in re.split(r"[\n;]+", texto or "") if x.strip()]
+
+
+def opciones_importacion(conn, empresa_id: int) -> dict:
+    """Opciones de importacion de la empresa (Excel y Google Sheets): que cursos controla y si los exige."""
+    r = conn.execute("SELECT cursos_controlados, exigir_cursos FROM empresas WHERE id = ?", (empresa_id,)).fetchone()
+    return {"solo_cursos": lineas_cursos(r["cursos_controlados"]) or None if r else None,
+            "exigir_cursos": bool(r["exigir_cursos"]) if r else False}
+
+
 # ------------------------------------------------------------------ sincronizacion
 def sincronizar_empresa(db_path, empresa_id: int, lector=None) -> dict:
     """Lee el Sheet de la empresa, lo importa y guarda el resultado. Nunca lanza: devuelve {'estado', 'detalle', ...}.
@@ -149,7 +162,8 @@ def sincronizar_empresa(db_path, empresa_id: int, lector=None) -> dict:
     conn = conectar(db_path)
     try:
         inicializar_db(conn)
-        e = conn.execute("SELECT nombre, sheet_url, sheet_fechas FROM empresas WHERE id = ? AND activa = 1",
+        e = conn.execute("SELECT nombre, sheet_url, sheet_fechas, cursos_controlados, exigir_cursos FROM empresas "
+                         "WHERE id = ? AND activa = 1",
                          (empresa_id,)).fetchone()
     finally:
         conn.close()
@@ -163,10 +177,14 @@ def sincronizar_empresa(db_path, empresa_id: int, lector=None) -> dict:
             raise SheetsError("El enlace guardado no es de Google Sheets. Vuelva a pegarlo.")
         hojas = (lector or leer_hojas)(sheet_id)
         stats = importar(None, db_path=db_path, verbose=False, hojas_crudas=hojas, empresa_forzada=e["nombre"],
-                         fechas="vencimiento" if e["sheet_fechas"] == "vencimiento" else "realizacion")
+                         fechas="vencimiento" if e["sheet_fechas"] == "vencimiento" else "realizacion",
+                         solo_cursos=lineas_cursos(e["cursos_controlados"]) or None,
+                         exigir_cursos=bool(e["exigir_cursos"]))
         estado = (f"ok: {stats['nuevos']} nuevos, {stats['actualizados']} actualizados"
                   + (f", {len(stats['errores'])} filas con error" if stats["errores"] else ""))
         detalle = "\n".join(stats["errores"][:30])
+        if len(stats["errores"]) > 30:
+            detalle += f"\n… y {len(stats['errores']) - 30} más."
     except SheetsError as exc:
         estado = f"error: {exc}"
     except SystemExit as exc:          # el importador explica que columnas faltan

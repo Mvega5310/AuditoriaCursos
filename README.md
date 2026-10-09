@@ -67,6 +67,19 @@ Pensado para listas como las de un hospital (≈7 cursos por enfermera/auxiliar)
 python scripts/importar_excel.py hospital.xlsx --vigencia-defecto 365
 ```
 
+## Formato de hospital (matriz con encabezado de varias filas)
+
+El importador lee también libros como el de un hospital: título del curso en una fila (celdas combinadas), «FECHA INICIAL / FECHA FINAL» debajo, una hoja por cargo.
+
+- **Pares inicio/final:** la primera columna del par es la realización y la última el vencimiento. Si falta el final y el título dice «(2 AÑOS)», se calcula.
+- **Una sola fecha** («FECHA ACTUALIZACIÓN»): es el vencimiento (use `fechas="vencimiento"`). Se acepta «X:fecha».
+- **N/A** = el curso no le aplica a esa persona (no cuenta como faltante). **Celda en blanco** = pendiente (sí es faltante si se exige).
+- **Cursos controlados:** en la web (menú Google Sheets → «Qué cursos controlar») o por CLI `--solo "BLS; ACLS; Duelo"`. Las demás columnas con fechas (vacunas, dengue…) se ignoran.
+- **Exigir cursos:** `--exigir` (o la casilla en la web) crea los requisitos por cargo según los cursos de su hoja.
+- **Hoja de retirados** (nombre con «retirad/inactiv/egresad/desvincul», con o sin encabezado): esas cédulas pasan a inactivas.
+- **Validar sin guardar:** `--validar`.
+- Cédulas duplicadas, sin cédula o fechas inválidas se reportan como errores, no se importan en silencio.
+
 ## Requisitos por cargo y documentos faltantes
 
 Hoja `Requisitos`: `Empresa | Cargo | Documento` (cargo `*` = todos los cargos). El sistema detecta a quien **nunca** registró un documento exigido

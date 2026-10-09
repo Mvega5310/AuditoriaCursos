@@ -264,7 +264,8 @@ def create_app(overrides: dict | None = None) -> Flask:
             archivo.save(ruta)
             stats = importar(ruta, db_path=app.config["DB_PATH"], verbose=False,
                              fechas=fechas,
-                             empresa_forzada=g.usuario["empresa"], solo_validar=validar)
+                             empresa_forzada=g.usuario["empresa"], solo_validar=validar,
+                             **sheets.opciones_importacion(db(), g.usuario["empresa_id"]))
         except SystemExit as exc:            # mensajes propios del importador: explican que falta
             mensaje = re.sub(r"^Error:\s*", "", str(exc))
             if "migrar_v1" in mensaje or "scripts/" in mensaje:       # instrucciones de consola: no son para el usuario web
@@ -293,7 +294,8 @@ def create_app(overrides: dict | None = None) -> Flask:
         eid, conn = g.usuario["empresa_id"], db()
 
         def estado():
-            return conn.execute("""SELECT sheet_url, sheet_fechas, sheet_sync_en, sheet_sync_estado, sheet_sync_detalle
+            return conn.execute("""SELECT sheet_url, sheet_fechas, sheet_sync_en, sheet_sync_estado, sheet_sync_detalle,
+                                          cursos_controlados, exigir_cursos
                                    FROM empresas WHERE id = ?""", (eid,)).fetchone()
 
         if request.method == "POST":
@@ -304,6 +306,13 @@ def create_app(overrides: dict | None = None) -> Flask:
                              "WHERE id = ?", (eid,))
                 conn.commit()
                 flash("Se desconectó la hoja. Los documentos ya cargados se conservan.", "ok")
+                return redirect(url_for("hoja_google"))
+            if accion == "opciones":
+                cursos = "\n".join(sheets.lineas_cursos(request.form.get("cursos", "")[:3000]))
+                conn.execute("UPDATE empresas SET cursos_controlados = ?, exigir_cursos = ? WHERE id = ?",
+                             (cursos, 1 if request.form.get("exigir") else 0, eid))
+                conn.commit()
+                flash("Opciones guardadas. Se aplican en la próxima importación o sincronización.", "ok")
                 return redirect(url_for("hoja_google"))
             if not sheets.configurado():
                 flash("La sincronización con Google Sheets aún no está activada. Contacte al administrador.", "error")

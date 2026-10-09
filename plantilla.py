@@ -23,7 +23,7 @@ INSTRUCCIONES = [
     ("Lo demás NO estorba:", True),
     ("  - Columnas extra (teléfono, observaciones, consecutivos…) se ignoran.", False),
     ("  - Los títulos o filas vacías encima de la tabla se saltan solos.", False),
-    ("  - Una celda vacía, 'N/A', '-' o 'Pendiente' significa 'sin registrar'.", False),
+    ("  - Una celda vacía, '-' o 'Pendiente' significa 'sin registrar'; 'N/A' significa 'no le aplica a esa persona'.", False),
     ("  - Una fila con un dato malo se omite y se le informa cuál era; las demás sí se guardan.", False),
     ("", False),
     ("Fechas: dd/mm/aaaa (por ejemplo 15/03/2027) o aaaa-mm-dd.", False),

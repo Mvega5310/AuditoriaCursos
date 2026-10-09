@@ -87,7 +87,7 @@ def test_faltantes_por_cargo(tmp_path):
     eid = conn.execute("SELECT id FROM empresas").fetchone()[0]
     falt = {f["identificacion"]: f for f in generar_alertas.consultar_faltantes(conn, eid)}
     assert falt["1"]["faltan"] == "Humanizacion del servicio"                      # Ana: solo el de todos
-    assert "Bioseguridad" in falt["2"]["faltan"] and "Humanizacion" in falt["2"]["faltan"]   # Luis: 'N/A'
+    assert falt["2"]["faltan"] == "Humanizacion del servicio"                      # Luis: Bioseguridad 'N/A' = no le aplica
     assert falt["3"]["cantidad"] == 3                                              # Eva: nada registrado
     html = generar_alertas.renderizar_html([], "semanal", "Hospital U", list(falt.values()))
     assert "sin registrar" in html and "Eva Gil" in html

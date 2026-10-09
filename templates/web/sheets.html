@@ -25,6 +25,17 @@
   {% endif %}
 </div>
 
+<div class="card">
+  <h2>Qué cursos controlar</h2>
+  <p class="mut">Sirve para el Excel y para Google Sheets. Si su matriz trae muchas columnas con fechas (vacunas, cursos que se hacen una sola vez…), escriba aquí solo los cursos que quiere vigilar, uno por línea. Las demás columnas se ignoran. Déjelo vacío para controlar todas las que tengan fechas.</p>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="opciones">
+    <label for="cursos">Cursos controlados (uno por línea)</label>
+    <textarea id="cursos" name="cursos" rows="7" placeholder="BLS&#10;ACLS&#10;Gestión del duelo">{{ e.cursos_controlados or '' }}</textarea>
+    <label><input type="checkbox" name="exigir" value="1" {{ 'checked' if e.exigir_cursos }}> Marcar como faltante a quien no tenga el curso. Lo que diga «N/A» en la hoja se entiende como «no le aplica» y no cuenta como faltante.</label>
+    <button>Guardar opciones</button>
+  </form>
+</div>
+
 {% if e.sheet_url %}
 <div class="card">
   <h2>Estado</h2>
