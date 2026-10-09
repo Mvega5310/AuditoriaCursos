@@ -54,7 +54,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day_of_week="mon-fri", hour=7, minute=0, timezone=ZONA_HORARIA),
         args=["diaria"],
         id="alerta_diaria",
-        name="Alerta diaria — vencen en 7 dias",
+        name="Alerta diaria — vencidos y 7 dias",
         misfire_grace_time=3600,  # tolera hasta 1h de retraso si el PC estaba apagado
     )
 
@@ -64,7 +64,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day_of_week="mon", hour=7, minute=30, timezone=ZONA_HORARIA),
         args=["semanal"],
         id="alerta_semanal",
-        name="Alerta semanal — vencen en 30 dias",
+        name="Alerta semanal — 7 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
@@ -74,7 +74,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day="1,15", hour=8, minute=0, timezone=ZONA_HORARIA),
         args=["quincenal"],
         id="alerta_quincenal",
-        name="Alerta quincenal — vencen en 15 dias",
+        name="Alerta quincenal — 15 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
@@ -84,7 +84,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day=1, hour=8, minute=30, timezone=ZONA_HORARIA),
         args=["mensual"],
         id="reporte_mensual",
-        name="Reporte mensual — vencen en 60 dias",
+        name="Reporte mensual — 30 dias + anticipacion",
         misfire_grace_time=3600,
     )
 

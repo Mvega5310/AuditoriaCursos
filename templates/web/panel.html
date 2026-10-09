@@ -1,15 +1,33 @@
 {% extends "base.html" %}{% block titulo %}Panel{% endblock %}
 {% block cuerpo %}<h1>{{ usuario.empresa }}</h1><p class="mut">Estado al {{ hoy }} · {{ empleados }} empleados activos</p>
+{% macro enlace(v) %}{{ url_for('panel', ventana=v, curso=f.curso or None, ubicacion=f.ubicacion or None) }}{% endmacro %}
 <div class="kpis">
-<div class="kpi"><b class="vencido">{{ resumen.vencido }}</b>Vencidos</div>
-<div class="kpi"><b class="critico">{{ resumen.critico }}</b>Críticos (≤7 días)</div>
-<div class="kpi"><b class="alerta">{{ resumen.alerta }}</b>Alerta (≤15 días)</div>
-<div class="kpi"><b>{{ resumen.proximo }}</b>Próximos (≤30 días)</div></div>
-{% if not empleados and not total %}<div class="card"><p>Aún no hay datos. <a href="{{ url_for('importar_vista') }}">Importe su Excel</a> para empezar.</p></div>{% endif %}
-{% if registros %}<div class="card tabla"><h2>Vencidos y por vencer (60 días)</h2><table>
-<tr><th>Titular</th><th>Cédula</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>
-{% for r in registros %}<tr><td>{{ r.titular }}</td><td>{{ r.identificacion }}</td><td>{{ r.documento }}</td><td>{{ r.fecha_vencimiento }}</td><td class="{{ r.clase }}">{{ r.estado_label }} ({{ r.dias_texto }} d)</td></tr>{% endfor %}
-</table>{% if total > registros|length %}<p class="mut">Mostrando {{ registros|length }} de {{ total }}.</p>{% endif %}</div>{% endif %}
-{% if faltantes %}<div class="card tabla"><h2>Documentos exigidos sin registrar</h2><table><tr><th>Persona</th><th>Cédula</th><th>Faltan</th></tr>
-{% for f in faltantes %}<tr><td>{{ f.titular }}</td><td>{{ f.identificacion }}</td><td>{{ f.faltan }}</td></tr>{% endfor %}</table></div>{% endif %}
+<a class="kpi {{ 'sel' if f.ventana == 'vencidos' }}" href="{{ enlace('vencidos') }}"><b class="vencido">{{ resumen.vencidos }}</b>Vencidos</a>
+<a class="kpi {{ 'sel' if f.ventana == '7' }}" href="{{ enlace(7) }}"><b class="critico">{{ resumen.d7 }}</b>Vencen en 7 días</a>
+<a class="kpi {{ 'sel' if f.ventana == '15' }}" href="{{ enlace(15) }}"><b class="alerta">{{ resumen.d15 }}</b>Vencen en 15 días</a>
+<a class="kpi {{ 'sel' if f.ventana == '30' }}" href="{{ enlace(30) }}"><b>{{ resumen.d30 }}</b>Vencen en 30 días</a>
+<a class="kpi {{ 'sel' if f.ventana == str_max }}" href="{{ enlace(maximo) }}"><b>{{ resumen.todos }}</b>Todo ({{ maximo }} días)</a>
+</div>
+{% if not empleados and not total_empresa %}<div class="card"><p>Aún no hay datos. <a href="{{ url_for('importar_vista') }}">Importe su Excel</a> para empezar.</p></div>{% endif %}
+
+<div class="card"><form method="get" class="filtros">
+  <div><label for="ventana">Mostrar</label><select id="ventana" name="ventana">
+    {% for v, t in opciones_ventana %}<option value="{{ v }}" {{ 'selected' if f.ventana == v }}>{{ t }}</option>{% endfor %}</select></div>
+  <div><label for="curso">Curso / documento</label><select id="curso" name="curso"><option value="">Todos</option>
+    {% for c in cursos %}<option {{ 'selected' if f.curso == c }}>{{ c }}</option>{% endfor %}</select></div>
+  <div><label for="ubicacion">Ubicación / área</label><select id="ubicacion" name="ubicacion"><option value="">Todas</option>
+    {% for u in ubicaciones %}<option {{ 'selected' if f.ubicacion == u }}>{{ u }}</option>{% endfor %}</select></div>
+  <div><button>Filtrar</button></div>
+</form></div>
+
+<div class="card tabla"><h2>{{ titulo }} — {{ total }} registro{{ '' if total == 1 else 's' }}</h2>
+{% if registros %}<p><a href="{{ url_for('panel_excel', ventana=f.ventana, curso=f.curso or None, ubicacion=f.ubicacion or None) }}">⬇ Descargar esta lista en Excel</a></p>
+<table>
+<tr><th>Titular</th><th>Cédula</th><th>Ubicación / cargo</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>
+{% for r in registros %}<tr><td>{{ r.titular }}</td><td>{{ r.identificacion }}</td><td>{{ r.area_cargo }}</td><td>{{ r.documento }}</td><td>{{ r.fecha_vencimiento }}</td><td class="{{ r.clase }}">{{ r.estado_label }} ({{ r.dias_texto }} d)</td></tr>{% endfor %}
+</table>{% if total > registros|length %}<p class="mut">Mostrando {{ registros|length }} de {{ total }}. Descargue el Excel para verlos todos.</p>{% endif %}
+{% else %}<p class="mut">No hay documentos con este filtro.</p>{% endif %}</div>
+
+{% if faltantes %}<div class="card tabla"><h2>Documentos exigidos sin registrar ({{ faltantes|length }} personas)</h2><table><tr><th>Persona</th><th>Cédula</th><th>Ubicación / cargo</th><th>Faltan</th></tr>
+{% for x in faltantes %}<tr><td>{{ x.titular }}</td><td>{{ x.identificacion }}</td><td>{{ x.area_cargo }}</td><td>{{ x.faltan }}</td></tr>{% endfor %}</table></div>{% endif %}
 {% endblock %}

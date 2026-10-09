@@ -139,6 +139,23 @@ python scripts/agregar_documento.py listar --sector salud
 
 `VENCIDO` (< 0 días) · `CRITICO` (0–7) · `ALERTA` (8–15) · `PROXIMO` (16–30) · `NORMAL` (> 30). Los umbrales se ajustan en `config.py`.
 
+## Avisos: cuándo llegan y qué incluyen
+
+Cada aviso trae los **vencidos** y lo que vence dentro de su **ventana = días hasta el próximo aviso + anticipación**.
+La anticipación son los días que la empresa necesita para gestionar una renovación (30 por defecto, de 0 a 180).
+Así ningún documento queda entre dos correos sin margen para renovarlo.
+
+| Aviso | Cuándo llega | Ventana (anticipación 30) |
+|---|---|---|
+| Diaria | lunes a viernes 07:00 | 7 días (fija, urgente) |
+| Semanal | lunes 07:30 | 7 + 30 = 37 días |
+| Quincenal | días 1 y 15, 08:00 | 15 + 30 = 45 días |
+| Mensual | día 1, 08:30 | 30 + 30 = 60 días |
+
+Cada empresa elige en la web (menú **Avisos**) su anticipación y qué avisos recibe. El **Panel** filtra por
+vencidos / 7 / 15 / 30 días, curso y ubicación, y descarga la lista filtrada en Excel. Al importar (o validar) se muestra
+cómo queda la empresa: vencidos y por vencer en 7, 15 y 30 días.
+
 ## Catálogo de tipos y vigencias
 
 La tabla `tipos_documento` (se carga desde `catalogo.py`) define la vigencia de cada tipo y está organizada por **sector**:

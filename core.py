@@ -197,7 +197,9 @@ def _asegurar_columnas(conn) -> None:
     cols_empresa = columnas("empresas")
     for col, tipo in (("sheet_url", "TEXT"), ("sheet_fechas", "TEXT DEFAULT 'realizacion'"), ("sheet_sync_en", "TEXT"),
                       ("sheet_sync_estado", "TEXT"), ("sheet_sync_detalle", "TEXT"),
-                      ("cursos_controlados", "TEXT"), ("exigir_cursos", "INTEGER NOT NULL DEFAULT 0")):
+                      ("cursos_controlados", "TEXT"), ("exigir_cursos", "INTEGER NOT NULL DEFAULT 0"),
+                      ("anticipacion_dias", "INTEGER NOT NULL DEFAULT 30"),
+                      ("alertas_activas", "TEXT NOT NULL DEFAULT 'diaria,semanal,quincenal,mensual'")):
         if col not in cols_empresa:
             conn.execute(f"ALTER TABLE empresas ADD COLUMN {col} {tipo}")
     if "sector" not in columnas("tipos_documento"):

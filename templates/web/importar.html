@@ -31,6 +31,15 @@
 
 {% if stats %}<div class="card">
   <h2>{{ 'Resultado de la validación (no se guardó nada)' if stats.solo_validar else 'Importación terminada' }}</h2>
+  {% for emp, r in (stats.resumen or {}).items() %}
+  <p class="mut">{{ 'Así quedaría' if stats.solo_validar else 'Así queda' }} {{ emp }} hoy:</p>
+  <div class="kpis">
+    <a class="kpi" href="{{ url_for('panel', ventana='vencidos') }}"><b class="vencido">{{ r.vencidos }}</b>Vencidos</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=7) }}"><b class="critico">{{ r.d7 }}</b>Vencen en 7 días</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=15) }}"><b class="alerta">{{ r.d15 }}</b>Vencen en 15 días</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=30) }}"><b>{{ r.d30 }}</b>Vencen en 30 días</a>
+  </div>
+  {% endfor %}
   <ul>
     <li>Documentos nuevos: <b>{{ stats.nuevos }}</b> · actualizados: <b>{{ stats.actualizados }}</b></li>
     <li>Personas en la matriz: {{ stats.personas_matriz }} · requisitos por cargo: {{ stats.requisitos }}</li>

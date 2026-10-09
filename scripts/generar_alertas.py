@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from config import (GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
-                    SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS)
+                    SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
 import core
 import correo
 from core import conectar, es_v1, hoy, dias_restantes, clasificar, normalizar
@@ -74,7 +74,7 @@ def consultar_faltantes(conn, empresa_id: int) -> list[dict]:
         faltan = [q["nombre"] for tid, q in exigidos.items() if tid not in tiene.get(e["id"], set())]
         if faltan:
             resultado.append({
-                "titular": _nombre(e), "identificacion": e["cedula"],
+                "titular": _nombre(e), "identificacion": e["cedula"], "area": e["area"] or "", "lista": sorted(faltan),
                 "area_cargo": " / ".join(x for x in (e["area"], e["cargo"]) if x) or "—",
                 "faltan": ", ".join(sorted(faltan)), "cantidad": len(faltan),
             })
@@ -109,6 +109,8 @@ def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict
         es_empresa = r["cedula"] is None
         documento = r["documento"] + (f" ({r['referencia']})" if r["referencia"] else "")
         registros.append({
+            "tipo":              r["documento"],
+            "area":              "" if es_empresa else (r["area"] or ""),
             "titular":           "EMPRESA" if es_empresa else _nombre(r),
             "identificacion":    "—" if es_empresa else r["cedula"],
             "area_cargo":        "—" if es_empresa else (" / ".join(x for x in (r["area"], r["cargo"]) if x) or "—"),
@@ -127,13 +129,25 @@ def _calcular_resumen(registros: list[dict]) -> dict:
     return {estado: sum(1 for r in registros if r["clase"] == estado) for estado in ESTADOS}
 
 
-def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: list[dict] | None = None) -> str:
+def configuracion_empresa(conn, empresa_id: int) -> dict:
+    """Anticipacion (dias) y alertas que recibe la empresa."""
+    r = conn.execute("SELECT anticipacion_dias, alertas_activas FROM empresas WHERE id = ?", (empresa_id,)).fetchone()
+    anticipacion = r["anticipacion_dias"] if r and r["anticipacion_dias"] is not None else ANTICIPACION_DEFECTO
+    texto = r["alertas_activas"] if r and r["alertas_activas"] is not None else ",".join(ALERTAS)   # "" = ninguna
+    activas = {x.strip() for x in texto.split(",") if x.strip()}
+    return {"anticipacion": anticipacion, "activas": activas,
+            "ventanas": {t: ventana_alerta(t, anticipacion) for t in ALERTAS}}
+
+
+def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: list[dict] | None = None,
+                    dias: int | None = None) -> str:
     config = ALERTAS[tipo]
+    dias = dias if dias is not None else ventana_alerta(tipo)
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_PATH.parent)), autoescape=True)
     template = env.get_template(TEMPLATE_PATH.name)
     return template.render(
         empresa=empresa,
-        tipo_alerta=config["label"],
+        tipo_alerta=config["label"].format(dias=dias),
         fecha_reporte=hoy().strftime("%d/%m/%Y"),
         registros=registros,
         total=len(registros),
@@ -189,15 +203,20 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
             log.error("La base de datos es del esquema anterior. Ejecute primero: python scripts/migrar_v1.py")
             return
 
-        log.info(f"=== Alerta '{tipo}' — vencidos + ventana de {config['dias']} dias"
-                 f"{' [DRY-RUN]' if dry_run else ''} ===")
+        log.info(f"=== Alerta '{tipo}' — vencidos + ventana = {config['periodo']} dias de periodo + anticipacion de "
+                 f"cada empresa{' [DRY-RUN]' if dry_run else ''} ===")
         empresas = conn.execute("SELECT id, nombre FROM empresas WHERE activa = 1 ORDER BY nombre").fetchall()
         if not empresas:
             log.warning("No hay empresas registradas.")
             return
 
         for emp in empresas:
-            registros = consultar_vencimientos(conn, emp["id"], config["dias"])
+            conf = configuracion_empresa(conn, emp["id"])
+            if tipo not in conf["activas"]:
+                log.info(f"[{emp['nombre']}] La empresa no recibe la alerta '{tipo}'. Omitida.")
+                continue
+            dias = conf["ventanas"][tipo]
+            registros = consultar_vencimientos(conn, emp["id"], dias)
             faltantes = consultar_faltantes(conn, emp["id"]) if config.get("faltantes") else []
             n_total = len(registros) + sum(f["cantidad"] for f in faltantes)
             if not registros and not faltantes:
@@ -206,8 +225,8 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
                     _registrar_log(conn, tipo, emp["id"], 0, "", "sin_registros")
                 continue
 
-            html = renderizar_html(registros, tipo, emp["nombre"], faltantes)
-            asunto = f"{config['asunto']} — {emp['nombre']}"
+            html = renderizar_html(registros, tipo, emp["nombre"], faltantes, dias)
+            asunto = f"{config['asunto'].format(dias=dias)} — {emp['nombre']}"
 
             if dry_run:
                 SALIDAS_DIR.mkdir(exist_ok=True)

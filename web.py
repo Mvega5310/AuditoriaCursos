@@ -231,18 +231,112 @@ def create_app(overrides: dict | None = None) -> Flask:
         return redirect(url_for("login"))
 
     # ------------------------------------------------------------ panel
+    def _vencimientos_filtrados():
+        """Vencimientos de la empresa segun los filtros de la URL: ventana (vencidos | N dias), curso y ubicacion."""
+        from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos, configuracion_empresa
+        eid, conn = g.usuario["empresa_id"], db()
+        maximo = max(configuracion_empresa(conn, eid)["ventanas"].values())
+        todos = consultar_vencimientos(conn, eid, max(maximo, 30))
+        faltantes = consultar_faltantes(conn, eid)
+        cursos = sorted({r["tipo"] for r in todos} | {c for x in faltantes for c in x["lista"]}, key=str.lower)
+        ubicaciones = sorted({r["area"] for r in todos if r["area"]} | {x["area"] for x in faltantes if x["area"]},
+                             key=str.lower)
+        curso = request.args.get("curso", "")
+        ubicacion = request.args.get("ubicacion", "")
+        curso = curso if curso in cursos else ""
+        ubicacion = ubicacion if ubicacion in ubicaciones else ""
+        ventana = request.args.get("ventana", str(maximo))
+        if ventana != "vencidos":
+            ventana = str(min(max(int(ventana), 0), 365)) if ventana.isdigit() else str(maximo)
+        base = [r for r in todos if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
+        resumen = {"vencidos": sum(1 for r in base if r["dias"] < 0),
+                   **{f"d{n}": sum(1 for r in base if 0 <= r["dias"] <= n) for n in (7, 15, 30)},
+                   "todos": sum(1 for r in base if r["dias"] <= maximo)}
+        if ventana == "vencidos":
+            registros, titulo = [r for r in base if r["dias"] < 0], "Vencidos"
+        else:
+            n = int(ventana)
+            if n > max(maximo, 30):
+                base = [r for r in consultar_vencimientos(conn, eid, n)
+                        if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
+            registros = [r for r in base if r["dias"] <= n]
+            v = sum(1 for r in registros if r["dias"] < 0)
+            titulo = f"Vencidos ({v}) y por vencer en {n} días ({len(registros) - v})"
+        faltantes = [x for x in faltantes if (not curso or curso in x["lista"]) and (not ubicacion or x["area"] == ubicacion)]
+        opciones = [("vencidos", "Solo vencidos")] + [(str(n), f"Vencidos + próximos {n} días")
+                                                      for n in sorted({7, 15, 30, maximo})]
+        if ventana not in dict(opciones):
+            opciones.append((ventana, f"Vencidos + próximos {ventana} días"))
+        filtros = {"ventana": ventana, "curso": curso, "ubicacion": ubicacion}
+        return dict(registros=registros, titulo=titulo, resumen=resumen, faltantes=faltantes, cursos=cursos,
+                    ubicaciones=ubicaciones, f=filtros, maximo=maximo, str_max=str(maximo), opciones_ventana=opciones,
+                    total_empresa=len(todos))
+
     @app.get("/panel")
     @login_requerido
     def panel():
-        from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos
-        eid = g.usuario["empresa_id"]
-        conn = db()
-        registros = consultar_vencimientos(conn, eid, 60)
-        resumen = {k: sum(1 for r in registros if r["clase"] == k) for k in ("vencido", "critico", "alerta", "proximo")}
-        faltantes = consultar_faltantes(conn, eid)
-        empleados = conn.execute("SELECT COUNT(*) FROM empleados WHERE empresa_id = ? AND activo = 1", (eid,)).fetchone()[0]
-        return render_template("panel.html", registros=registros[:300], total=len(registros), resumen=resumen,
-                               faltantes=faltantes, empleados=empleados, hoy=hoy().strftime("%d/%m/%Y"))
+        datos = _vencimientos_filtrados()
+        registros = datos.pop("registros")
+        empleados = db().execute("SELECT COUNT(*) FROM empleados WHERE empresa_id = ? AND activo = 1",
+                                 (g.usuario["empresa_id"],)).fetchone()[0]
+        return render_template("panel.html", registros=registros[:300], total=len(registros), empleados=empleados,
+                               hoy=hoy().strftime("%d/%m/%Y"), **datos)
+
+    @app.get("/panel.xlsx")
+    @login_requerido
+    def panel_excel():
+        """La misma lista filtrada del panel, completa, en Excel (mas los faltantes en otra hoja)."""
+        import io
+        import openpyxl
+        from flask import Response
+        from openpyxl.styles import Font
+        datos = _vencimientos_filtrados()
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Vencimientos"
+        ws.append(["Titular", "Cédula", "Ubicación", "Ubicación / cargo", "Documento", "Vence", "Días", "Estado"])
+        for r in datos["registros"]:
+            ws.append([r["titular"], r["identificacion"], r["area"], r["area_cargo"], r["documento"],
+                       r["fecha_vencimiento"], r["dias"], r["estado_label"]])
+        wf = wb.create_sheet("Sin registrar")
+        wf.append(["Persona", "Cédula", "Ubicación / cargo", "Faltan", "Cantidad"])
+        for x in datos["faltantes"]:
+            wf.append([x["titular"], x["identificacion"], x["area_cargo"], x["faltan"], x["cantidad"]])
+        for hoja in (ws, wf):
+            for c in hoja[1]:
+                c.font = Font(bold=True)
+            hoja.freeze_panes = "A2"
+            hoja.auto_filter.ref = hoja.dimensions
+            for col in hoja.columns:
+                hoja.column_dimensions[col[0].column_letter].width = min(45, max(10, *(len(str(c.value or "")) for c in col)) + 2)
+        buf = io.BytesIO()
+        wb.save(buf)
+        nombre = f"vencimientos_{hoy().isoformat()}.xlsx"
+        return Response(buf.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f"attachment; filename={nombre}"})
+
+    @app.route("/avisos", methods=["GET", "POST"])
+    @login_requerido
+    def avisos():
+        from config import ALERTAS, ANTICIPACION_RANGO
+        from scripts.generar_alertas import configuracion_empresa
+        eid, conn = g.usuario["empresa_id"], db()
+        if request.method == "POST":
+            try:
+                anticipacion = int(request.form.get("anticipacion", ""))
+            except ValueError:
+                anticipacion = -1
+            if not ANTICIPACION_RANGO[0] <= anticipacion <= ANTICIPACION_RANGO[1]:
+                flash(f"La anticipación debe estar entre {ANTICIPACION_RANGO[0]} y {ANTICIPACION_RANGO[1]} días.", "error")
+                return redirect(url_for("avisos"))
+            activas = [t for t in ALERTAS if t in request.form.getlist("alertas")]
+            conn.execute("UPDATE empresas SET anticipacion_dias = ?, alertas_activas = ? WHERE id = ?",
+                         (anticipacion, ",".join(activas), eid))
+            conn.commit()
+            flash("Avisos guardados." if activas else "Avisos guardados. Ojo: no recibirá ningún correo.", "ok")
+            return redirect(url_for("avisos"))
+        return render_template("avisos.html", conf=configuracion_empresa(conn, eid), alertas=ALERTAS,
+                               rango=ANTICIPACION_RANGO)
 
     @app.route("/importar", methods=["GET", "POST"])
     @login_requerido

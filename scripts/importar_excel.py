@@ -503,6 +503,25 @@ def _marcar_retirados(cur, crudo: pd.DataFrame, empresa_defecto: str, stats: dic
             stats["retirados"] += max(cur.rowcount, 0)
 
 
+def resumen_vencimientos(cur, empresa: str) -> dict:
+    """Como queda la empresa despues de importar: vencidos y por vencer en 7, 15 y 30 dias
+    (personal activo y documentos de la empresa). Se calcula dentro de la transaccion, asi tambien sirve al validar."""
+    h = hoy()
+    cortes = {"vencidos": h - timedelta(days=1)} | {f"d{n}": h + timedelta(days=n) for n in (7, 15, 30)}
+    fila = cur.execute("SELECT id FROM empresas WHERE nombre = ?", (empresa,)).fetchone()
+    if not fila:
+        return {k: 0 for k in cortes}
+    fechas = [r[0] for r in cur.execute("""
+        SELECT d.fecha_vencimiento FROM documentos d LEFT JOIN empleados e ON e.id = d.empleado_id
+        WHERE d.empresa_id = ? AND d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento <= ?
+          AND (d.empleado_id IS NULL OR e.activo = 1)""", (fila[0], cortes["d30"].isoformat())).fetchall()]
+    vencidos = sum(1 for f in fechas if f < h.isoformat())
+    res = {"vencidos": vencidos}
+    for n in (7, 15, 30):          # por vencer (sin contar los ya vencidos), acumulado hasta n dias
+        res[f"d{n}"] = sum(1 for f in fechas if h.isoformat() <= f <= cortes[f"d{n}"].isoformat())
+    return res
+
+
 def _clasificar_hoja(df: pd.DataFrame) -> str:
     columnas = {_canon(c, ALIAS_DOCUMENTOS) or normalizar(c) for c in df.columns}
     if "documento" in columnas:
@@ -684,6 +703,7 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
         _importar_requisitos(cur, df, empresa_defecto, stats)
     for crudo in retirados.values():                    # al final: quien figura como retirado queda inactivo
         _marcar_retirados(cur, crudo, empresa_defecto, stats)
+    stats["resumen"] = {e: resumen_vencimientos(cur, e) for e in sorted(stats["empresas"])}
     if solo_validar:
         conn.rollback()
     else:
@@ -712,6 +732,9 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
             print(f"  Columnas fuera de los cursos controlados: {', '.join(stats['columnas_no_controladas'])}")
         if stats["hojas_ignoradas"]:
             print(f"  Hojas no reconocidas e ignoradas: {', '.join(stats['hojas_ignoradas'])}")
+        for emp, r in stats["resumen"].items():
+            print(f"  Estado de {emp}: {r['vencidos']} vencidos | vencen en 7 dias: {r['d7']} | "
+                  f"en 15: {r['d15']} | en 30: {r['d30']}")
         print(f"  Filas con error:        {len(stats['errores'])}")
         for e in stats["errores"]:
             print(f"    - {e}")

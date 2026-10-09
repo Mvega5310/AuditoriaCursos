@@ -32,35 +32,55 @@ DEFAULT_EMPRESA = "Empresa principal"
 # Limites (en dias restantes) de cada estado. Menos de 0 dias = VENCIDO.
 UMBRALES = {"critico": 7, "alerta": 15, "proximo": 30}
 
-# Ventana de dias y configuracion de cada tipo de alerta.
+# Tipos de alerta. La VENTANA (hasta cuantos dias antes de vencer aparece un documento) es
+#     periodo (dias entre un correo y el siguiente) + anticipacion de la empresa (dias para gestionar la renovacion).
+# Asi ningun documento "se cuela" entre dos correos sin margen para renovarlo. Con la anticipacion por defecto (30):
+#     semanal 7+30 = 37, quincenal 15+30 = 45, mensual 30+30 = 60.
+# La diaria es la excepcion: es el aviso urgente y su ventana es fija (7 dias).
 # Todas las alertas incluyen ademas los documentos ya VENCIDOS.
 # 'faltantes': incluir los documentos exigidos por el cargo que nunca se han registrado.
+ANTICIPACION_DEFECTO = 30
+ANTICIPACION_RANGO = (0, 180)
 ALERTAS = {
     "diaria": {
-        "dias": 7,
+        "periodo": 1,
+        "ventana_fija": 7,
         "faltantes": False,   # la diaria solo trae lo urgente
-        "asunto": "[URGENTE] Documentos vencidos o por vencer en 7 dias o menos",
-        "label": "Alerta Diaria — Vencidos y por vencer en 7 dias o menos",
+        "nombre": "Diaria (lunes a viernes)",
+        "asunto": "[URGENTE] Documentos vencidos o por vencer en {dias} dias o menos",
+        "label": "Alerta Diaria — Vencidos y por vencer en {dias} dias o menos",
     },
     "semanal": {
-        "dias": 30,
+        "periodo": 7,
         "faltantes": True,
+        "nombre": "Semanal (lunes)",
         "asunto": "Reporte Semanal — Documentos vencidos y proximos a vencer",
-        "label": "Reporte Semanal — Vencidos y por vencer en los proximos 30 dias",
+        "label": "Reporte Semanal — Vencidos y por vencer en los proximos {dias} dias",
     },
     "quincenal": {
-        "dias": 15,
+        "periodo": 15,
         "faltantes": True,
+        "nombre": "Quincenal (días 1 y 15)",
         "asunto": "Reporte Quincenal — Documentos vencidos y proximos a vencer",
-        "label": "Reporte Quincenal — Vencidos y por vencer en los proximos 15 dias",
+        "label": "Reporte Quincenal — Vencidos y por vencer en los proximos {dias} dias",
     },
     "mensual": {
-        "dias": 60,
+        "periodo": 30,
         "faltantes": True,
+        "nombre": "Mensual (día 1 de cada mes)",
         "asunto": "Reporte Mensual — Panorama de vencimientos",
-        "label": "Reporte Mensual — Vencidos y por vencer en los proximos 60 dias",
+        "label": "Reporte Mensual — Vencidos y por vencer en los proximos {dias} dias",
     },
 }
+
+
+def ventana_alerta(tipo: str, anticipacion: int | None = None) -> int:
+    """Dias hacia adelante que cubre la alerta `tipo` para una empresa con esa anticipacion."""
+    conf = ALERTAS[tipo]
+    if "ventana_fija" in conf:
+        return conf["ventana_fija"]
+    return conf["periodo"] + (ANTICIPACION_DEFECTO if anticipacion is None else anticipacion)
+
 
 # Etiquetas legibles de cada categoria
 CATEGORIAS = {

@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block titulo %}Avisos{% endblock %}
+{% block cuerpo %}<div class="card"><h1>Avisos por correo</h1>
+<p>Cada aviso trae los documentos <b>vencidos</b> y los que vencen dentro de su ventana. La ventana es
+<b>el tiempo hasta el próximo aviso + su anticipación</b>, para que ningún documento quede entre dos correos sin margen para renovarlo.</p>
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
+  <label for="anticipacion">Anticipación: días que necesita para gestionar una renovación (agendar el curso, el examen…)</label>
+  <input id="anticipacion" name="anticipacion" type="number" min="{{ rango[0] }}" max="{{ rango[1] }}" value="{{ conf.anticipacion }}" required style="max-width:160px">
+  <h2>Qué avisos recibe</h2>
+  <div class="tabla"><table><tr><th></th><th>Aviso</th><th>Cuándo llega</th><th>Ventana con su anticipación</th></tr>
+  {% for t, a in alertas.items() %}<tr>
+    <td><input type="checkbox" id="al_{{ t }}" name="alertas" value="{{ t }}" {{ 'checked' if t in conf.activas }}></td>
+    <td><label for="al_{{ t }}" style="margin:0">{{ t|capitalize }}</label></td>
+    <td class="mut">{{ a.nombre }}</td>
+    <td>{% if a.ventana_fija %}vencidos + {{ a.ventana_fija }} días <span class="mut">(urgente, fija)</span>{% else %}vencidos + {{ a.periodo }} + {{ conf.anticipacion }} = <b>{{ conf.ventanas[t] }} días</b>{% endif %}</td>
+  </tr>{% endfor %}</table></div>
+  <p class="mut">Con 500 personas o más, suele bastar con quincenal y mensual; la diaria solo trae lo urgente.</p>
+  <button>Guardar</button>
+</form></div>{% endblock %}
