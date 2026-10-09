@@ -16,7 +16,16 @@ CREATE TABLE IF NOT EXISTS empresas (
     nit     TEXT    DEFAULT '',
     sector  TEXT    DEFAULT '',
     activa  INTEGER DEFAULT 1,
-    consentimiento_en TEXT              -- aceptacion del tratamiento de datos (Ley 1581) al registrarse
+    consentimiento_en TEXT,             -- aceptacion del tratamiento de datos (Ley 1581) al registrarse
+    sheet_url         TEXT,             -- Google Sheet que se sincroniza cada dia (NULL = no usa Sheets)
+    sheet_fechas      TEXT DEFAULT 'realizacion',   -- en una matriz: realizacion | vencimiento
+    sheet_sync_en     TEXT,             -- ultima sincronizacion
+    sheet_sync_estado TEXT,             -- 'ok: ...' o 'error: ...'
+    sheet_sync_detalle TEXT,            -- filas que no se pudieron leer
+    cursos_controlados TEXT,            -- una matriz: solo estos cursos (uno por linea; vacio = todos los que tengan fechas)
+    exigir_cursos      INTEGER NOT NULL DEFAULT 0,  -- 1 = cada cargo debe tener los cursos controlados de su hoja (salvo los marcados N/A)
+    anticipacion_dias  INTEGER NOT NULL DEFAULT 30, -- dias para gestionar una renovacion: ventana = periodo de la alerta + esto
+    alertas_activas    TEXT    NOT NULL DEFAULT 'diaria,semanal,quincenal,mensual'   -- que alertas recibe la empresa
 );
 
 -- Quien recibe las alertas de cada empresa (puede haber varios)
@@ -67,6 +76,7 @@ CREATE TABLE IF NOT EXISTS documentos (
     entidad_emisora    TEXT    DEFAULT '',
     fecha_emision      TEXT,
     fecha_vencimiento  TEXT,                    -- NULL = sin vencimiento
+    no_aplica          INTEGER NOT NULL DEFAULT 0,   -- 1 = el documento no aplica a esta persona (cuenta como cumplido)
     avisar_dias        INTEGER,                 -- NULL = solo las ventanas normales; N = aparece en TODAS las alertas desde N dias antes
     archivo            TEXT    DEFAULT '',      -- ruta o enlace al soporte (PDF/foto)
     observaciones      TEXT    DEFAULT '',

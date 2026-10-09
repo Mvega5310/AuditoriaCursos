@@ -187,10 +187,21 @@ def _asegurar_columnas(conn) -> None:
             return {r[0] for r in conn.execute(
                 "SELECT column_name FROM information_schema.columns WHERE table_name = ?", (tabla,))}
         return {r[1] for r in conn.execute(f"PRAGMA table_info({tabla})")}
-    if "avisar_dias" not in columnas("documentos"):
+    cols_doc = columnas("documentos")
+    if "avisar_dias" not in cols_doc:
         conn.execute("ALTER TABLE documentos ADD COLUMN avisar_dias INTEGER")
+    if "no_aplica" not in cols_doc:
+        conn.execute("ALTER TABLE documentos ADD COLUMN no_aplica INTEGER NOT NULL DEFAULT 0")
     if "consentimiento_en" not in columnas("empresas"):
         conn.execute("ALTER TABLE empresas ADD COLUMN consentimiento_en TEXT")
+    cols_empresa = columnas("empresas")
+    for col, tipo in (("sheet_url", "TEXT"), ("sheet_fechas", "TEXT DEFAULT 'realizacion'"), ("sheet_sync_en", "TEXT"),
+                      ("sheet_sync_estado", "TEXT"), ("sheet_sync_detalle", "TEXT"),
+                      ("cursos_controlados", "TEXT"), ("exigir_cursos", "INTEGER NOT NULL DEFAULT 0"),
+                      ("anticipacion_dias", "INTEGER NOT NULL DEFAULT 30"),
+                      ("alertas_activas", "TEXT NOT NULL DEFAULT 'diaria,semanal,quincenal,mensual'")):
+        if col not in cols_empresa:
+            conn.execute(f"ALTER TABLE empresas ADD COLUMN {col} {tipo}")
     if "sector" not in columnas("tipos_documento"):
         conn.execute("ALTER TABLE tipos_documento ADD COLUMN sector TEXT NOT NULL DEFAULT 'general'")
 
@@ -222,7 +233,8 @@ def parsear_fecha(valor, serial: bool = True) -> str | None:
             return valor.strftime("%Y-%m-%d")
         except ValueError:      # pandas.NaT
             return None
-    completo = str(valor).strip()
+    # Prefijo de casilla marcada: 'X: 30/06/2016', 'X;19/08/2023', 'X_23/03/2022'
+    completo = re.sub(r"^\s*[xX]\s*[:;_\-]*\s*(?=\d)", "", str(valor).strip())
     texto = completo.split(" ")[0].split("T")[0]
     if not texto or texto.lower() in ("nan", "nat", "none"):
         return None

@@ -67,6 +67,19 @@ Pensado para listas como las de un hospital (≈7 cursos por enfermera/auxiliar)
 python scripts/importar_excel.py hospital.xlsx --vigencia-defecto 365
 ```
 
+## Formato de hospital (matriz con encabezado de varias filas)
+
+El importador lee también libros como el de un hospital: título del curso en una fila (celdas combinadas), «FECHA INICIAL / FECHA FINAL» debajo, una hoja por cargo.
+
+- **Pares inicio/final:** la primera columna del par es la realización y la última el vencimiento. Si falta el final, esa fila se descarta (no se inventa un vencimiento) y se informa cuántas por curso.
+- **Una sola fecha** («FECHA ACTUALIZACIÓN»): es el vencimiento (use `fechas="vencimiento"`). Se acepta «X:fecha».
+- **N/A** = el curso no le aplica a esa persona (no cuenta como faltante). **Celda en blanco** = pendiente (sí es faltante si se exige).
+- **Cursos controlados:** en la web (menú Google Sheets → «Qué cursos controlar») o por CLI `--solo "BLS; ACLS; Duelo"`. Las demás columnas con fechas (vacunas, dengue…) se ignoran.
+- **Exigir cursos:** `--exigir` (o la casilla en la web) crea los requisitos por cargo según los cursos de su hoja.
+- **Hoja de retirados** (nombre con «retirad/inactiv/egresad/desvincul», con o sin encabezado): esas cédulas pasan a inactivas.
+- **Validar sin guardar:** `--validar`.
+- Cédulas duplicadas, sin cédula o fechas inválidas se reportan como errores con hoja, fila, persona y curso, para corregirlas en el archivo.
+
 ## Requisitos por cargo y documentos faltantes
 
 Hoja `Requisitos`: `Empresa | Cargo | Documento` (cargo `*` = todos los cargos). El sistema detecta a quien **nunca** registró un documento exigido
@@ -78,6 +91,26 @@ python scripts/agregar_documento.py requisitos --empresa "Clinica Bahia SAS"    
 ```
 
 Un cargo se compara sin importar mayúsculas ni tildes. Un documento registrado sin fecha de vencimiento cuenta como presente.
+
+## Sincronización diaria con Google Sheets
+
+El cliente mantiene su lista en una hoja de Google; cada día a las **6:30** el sistema la lee (antes de las alertas de las 7:00) y actualiza
+sin duplicar, igual que con el Excel (lista, matriz y requisitos, mismas columnas). También hay un botón **Sincronizar ahora** en el menú *Google Sheets*.
+Solo **lee** la hoja; nunca la modifica. Si se borra una fila de la hoja, el documento **no** se borra del sistema.
+
+**Configuración única (administrador del sistema, ~10 min):**
+1. En https://console.cloud.google.com crea un proyecto → *APIs y servicios* → *Biblioteca* → activa **Google Sheets API**.
+2. *IAM y administración* → *Cuentas de servicio* → *Crear cuenta de servicio* (nombre `autcursos`; sin roles).
+3. En esa cuenta → *Claves* → *Agregar clave* → *JSON*. Se descarga un archivo: **no lo subas a GitHub**.
+4. En Railway (o tu `.env`) crea la variable `GOOGLE_SERVICE_ACCOUNT_JSON` y pega **todo el contenido** del archivo
+   (o ese contenido en base64 si tu panel no admite varias líneas).
+5. Reinicia la app. En el menú *Google Sheets* verás el correo de la cuenta (`...@...iam.gserviceaccount.com`).
+
+**Por cada cliente:** abre su hoja → *Compartir* → agrega ese correo como **Lector** → pega el enlace en *Google Sheets* dentro de la app.
+No uses «cualquier persona con el enlace»: la hoja trae cédulas y datos de salud. Los clientes deben haber autorizado el tratamiento de datos (Ley 1581).
+
+Las fechas se leen por su valor real, no por el texto en pantalla, así que no dependen del idioma de la hoja.
+Si algo falla (sin acceso, columnas no reconocidas, filas con datos malos) el estado y las filas afectadas se ven en esa misma pantalla.
 
 ## Agregar un documento específico (sin armar un Excel)
 
@@ -105,6 +138,23 @@ python scripts/agregar_documento.py listar --sector salud
 ## Estados
 
 `VENCIDO` (< 0 días) · `CRITICO` (0–7) · `ALERTA` (8–15) · `PROXIMO` (16–30) · `NORMAL` (> 30). Los umbrales se ajustan en `config.py`.
+
+## Avisos: cuándo llegan y qué incluyen
+
+Cada aviso trae los **vencidos** y lo que vence dentro de su **ventana = días hasta el próximo aviso + anticipación**.
+La anticipación son los días que la empresa necesita para gestionar una renovación (30 por defecto, de 0 a 180).
+Así ningún documento queda entre dos correos sin margen para renovarlo.
+
+| Aviso | Cuándo llega | Ventana (anticipación 30) |
+|---|---|---|
+| Diaria | lunes a viernes 07:00 | 7 días (fija, urgente) |
+| Semanal | lunes 07:30 | 7 + 30 = 37 días |
+| Quincenal | días 1 y 15, 08:00 | 15 + 30 = 45 días |
+| Mensual | día 1, 08:30 | 30 + 30 = 60 días |
+
+Cada empresa elige en la web (menú **Avisos**) su anticipación y qué avisos recibe. El **Panel** filtra por
+vencidos / 7 / 15 / 30 días, curso y ubicación, y descarga la lista filtrada en Excel. Al importar (o validar) se muestra
+cómo queda la empresa: vencidos y por vencer en 7, 15 y 30 días.
 
 ## Catálogo de tipos y vigencias
 
@@ -134,7 +184,7 @@ scripts/migrar_v1.py        migra la base anterior
 scripts/generar_alertas.py  alertas por empresa (--dry-run)
 scheduler.py         programa las alertas (Lun-Vie 07:00, etc.)
 templates/alerta_email.html
-tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py
+tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py, tests/test_sheets.py
 ```
 
 ## Aplicación web (registro de empresas)

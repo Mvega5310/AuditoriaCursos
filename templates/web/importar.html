@@ -30,7 +30,7 @@
   <div class="info"><span class="icono-info">{{ ico("info", 20) }}</span>
     <ul>
       <li>Las columnas que sobren (teléfono, observaciones…) y los títulos encima de la tabla no estorban.</li>
-      <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
+      <li>Celda vacía, «-» o «Pendiente» = sin registrar. «N/A» = el curso no le aplica a esa persona. Fechas: dd/mm/aaaa.</li>
       <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál; las demás sí se guardan.</li>
     </ul></div>
 </section>
@@ -52,6 +52,15 @@
 
 {% if stats %}<section class="card">
   <h2>{{ 'Resultado de la validación (no se guardó nada)' if stats.solo_validar else 'Importación terminada' }}</h2>
+  {% for emp, r in (stats.resumen or {}).items() %}
+  <p class="mut">{{ 'Así quedaría' if stats.solo_validar else 'Así queda' }} {{ emp }} hoy:</p>
+  <div class="kpis">
+    <a class="kpi" href="{{ url_for('panel', ventana='vencidos') }}"><b class="vencido">{{ r.vencidos }}</b>Vencidos</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=7) }}"><b class="critico">{{ r.d7 }}</b>Vencen en 7 días</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=15) }}"><b class="alerta">{{ r.d15 }}</b>Vencen en 15 días</a>
+    <a class="kpi" href="{{ url_for('panel', ventana=30) }}"><b>{{ r.d30 }}</b>Vencen en 30 días</a>
+  </div>
+  {% endfor %}
   <div class="kpis" style="margin-bottom:12px">
     <div class="kpi"><b>{{ stats.nuevos }}</b>Documentos nuevos</div>
     <div class="kpi"><b>{{ stats.actualizados }}</b>Actualizados</div>
@@ -59,6 +68,10 @@
     <div class="kpi"><b>{{ stats.requisitos }}</b>Requisitos por cargo</div>
   </div>
   <p class="mut">Sin fecha de vencimiento (se guardan pero no generan alertas): {{ stats.sin_vencimiento }}</p>
+  {% if stats.no_aplica %}<p class="mut">Cursos marcados «N/A» (no le aplican a esa persona): {{ stats.no_aplica }}</p>{% endif %}
+  {% if stats.sin_fecha_final %}<p class="mut">Descartados por tener fecha de inicio pero no fecha final: {% for k, v in stats.sin_fecha_final.items() %}{{ k }} ({{ v }}){{ ", " if not loop.last }}{% endfor %}.</p>{% endif %}
+  {% if stats.retirados %}<p class="mut">Personal retirado pasado a inactivo: {{ stats.retirados }}</p>{% endif %}
+  {% if stats.columnas_no_controladas %}<p class="mut">Columnas con fechas que se ignoraron por no estar en «Qué cursos controlar»: {{ stats.columnas_no_controladas|length }} (<a href="{{ url_for('hoja_google') }}">ver o cambiar</a>).</p>{% endif %}
   {% if stats.columnas_ignoradas %}<p class="mut">Columnas ignoradas por no tener fechas: {{ stats.columnas_ignoradas|join(', ') }}</p>{% endif %}
   {% if stats.hojas_ignoradas %}<p class="mut">Hojas no reconocidas (ignoradas): {{ stats.hojas_ignoradas|join(', ') }}</p>{% endif %}
   {% if stats.errores %}<p class="msg error">Filas que no se pudieron usar ({{ stats.errores|length }}):</p>
@@ -81,7 +94,7 @@
   </div>
   <ul>
     <li>Las columnas que sobren y los títulos sobre la tabla <b>no estorban</b>.</li>
-    <li>Celda vacía, «N/A», «-» o «Pendiente» = sin registrar. Fechas: dd/mm/aaaa.</li>
+    <li>Celda vacía, «-» o «Pendiente» = sin registrar. «N/A» = el curso no le aplica a esa persona. Fechas: dd/mm/aaaa.</li>
     <li>Pruebe primero con <b>Validar sin guardar</b>: no cambia nada.</li>
   </ul>
   <form method="dialog" class="pie">

@@ -6,10 +6,11 @@
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
     {% for k, c in tipos.items() %}
-    <a href="{{ url_for('alertas', tipo=k) }}" class="chip {{ 'on' if k == tipo }}">{{ k|capitalize }} · {{ c.dias }} días</a>
+    <a href="{{ url_for('alertas', tipo=k) }}" class="chip {{ 'on' if k == tipo }}">{{ k|capitalize }} · {{ c.dias }} días{{ '' if c.activa else ' (desactivado)' }}</a>
     {% endfor %}
   </div>
 
+  {% if not tipos[tipo].activa %}<p class="msg error">Este aviso está desactivado para su empresa: no se envía. Puede activarlo en <a href="{{ url_for('avisos') }}">Avisos</a>.</p>{% endif %}
   <p><b>Se enviaría a:</b>
     {% if destinatarios %}{{ destinatarios|join(', ') }}{% else %}<span class="critico">nadie: agregue un responsable en la sección Responsables</span>{% endif %}
   </p>

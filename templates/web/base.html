@@ -34,6 +34,8 @@
   {% set ep = request.endpoint %}
   <a href="{{ url_for('panel') }}" class="{{ 'act' if ep == 'panel' }}" {{ 'aria-current=page' if ep == 'panel' }}>{{ ico("home") }} Panel</a>
   <a href="{{ url_for('importar_vista') }}" class="{{ 'act' if ep == 'importar_vista' }}" {{ 'aria-current=page' if ep == 'importar_vista' }}>{{ ico("excel") }} Importar Excel</a>
+  <a href="{{ url_for('avisos') }}" class="{{ 'act' if ep == 'avisos' }}" {{ 'aria-current=page' if ep == 'avisos' }}>{{ ico("bell") }} Avisos</a>
+  <a href="{{ url_for('hoja_google') }}" class="{{ 'act' if ep == 'hoja_google' }}" {{ 'aria-current=page' if ep == 'hoja_google' }}>{{ ico("sheets") }} Google Sheets</a>
   <a href="{{ url_for('alertas') }}" class="{{ 'act' if ep == 'alertas' }}" {{ 'aria-current=page' if ep == 'alertas' }}>{{ ico("bell") }} Alertas</a>
   <a href="{{ url_for('responsables') }}" class="{{ 'act' if ep == 'responsables' }}" {{ 'aria-current=page' if ep == 'responsables' }}>{{ ico("users") }} Responsables</a>
 </aside>

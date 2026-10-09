@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
 from scripts.generar_alertas import ejecutar_alerta
+from sheets import sincronizar_todas
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,7 +37,16 @@ ZONA_HORARIA = "America/Bogota"
 
 
 def registrar_jobs(scheduler) -> None:
-    """Registra las 4 alertas en un scheduler (Blocking para el script, Background para la web)."""
+    """Registra la sincronizacion con Google Sheets y las 4 alertas (Blocking para el script, Background para la web)."""
+
+    # Sincroniza los Google Sheets de los clientes ANTES de las alertas, todos los dias a las 06:30
+    scheduler.add_job(
+        sincronizar_todas,
+        CronTrigger(hour=6, minute=30, timezone=ZONA_HORARIA),
+        id="sync_sheets",
+        name="Sincronizar Google Sheets",
+        misfire_grace_time=3600,
+    )
 
     # Alerta diaria: lunes a viernes, 07:00
     scheduler.add_job(
@@ -44,7 +54,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day_of_week="mon-fri", hour=7, minute=0, timezone=ZONA_HORARIA),
         args=["diaria"],
         id="alerta_diaria",
-        name="Alerta diaria — vencen en 7 dias",
+        name="Alerta diaria — vencidos y 7 dias",
         misfire_grace_time=3600,  # tolera hasta 1h de retraso si el PC estaba apagado
     )
 
@@ -54,7 +64,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day_of_week="mon", hour=7, minute=30, timezone=ZONA_HORARIA),
         args=["semanal"],
         id="alerta_semanal",
-        name="Alerta semanal — vencen en 30 dias",
+        name="Alerta semanal — 7 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
@@ -64,7 +74,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day="1,15", hour=8, minute=0, timezone=ZONA_HORARIA),
         args=["quincenal"],
         id="alerta_quincenal",
-        name="Alerta quincenal — vencen en 15 dias",
+        name="Alerta quincenal — 15 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
@@ -74,7 +84,7 @@ def registrar_jobs(scheduler) -> None:
         CronTrigger(day=1, hour=8, minute=30, timezone=ZONA_HORARIA),
         args=["mensual"],
         id="reporte_mensual",
-        name="Reporte mensual — vencen en 60 dias",
+        name="Reporte mensual — 30 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
@@ -85,6 +95,7 @@ def main() -> None:
 
     log.info("=== autCursos Scheduler iniciado ===")
     log.info(f"  Zona horaria : {ZONA_HORARIA}")
+    log.info("  Google Sheets    : todos los dias a las 06:30")
     log.info("  Alerta diaria    : Lun-Vie a las 07:00")
     log.info("  Alerta semanal   : Lunes  a las 07:30")
     log.info("  Alerta quincenal : Dias 1 y 15 a las 08:00")
