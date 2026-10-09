@@ -360,10 +360,12 @@ def _coincide(nombre: str, entradas: list[str]) -> bool:
 
 def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
                      fechas: str = "emision", vigencia_defecto: int | None = None,
-                     solo_cursos: list[str] | None = None, exigir_cursos: bool = False) -> None:
+                     solo_cursos: list[str] | None = None, exigir_cursos: bool = False,
+                     hoja: str = "") -> None:
     """Convierte la matriz persona x curso a filas (formato largo) y las importa.
     - Un curso puede tener UNA columna (la fecha significa realizacion o vencimiento segun `fechas`) o DOS
-      (inicio y final): el inicio es la realizacion y el final el vencimiento; si falta el final se calcula con la vigencia.
+      (inicio y final): el inicio es la realizacion y el final el vencimiento; si falta el final, la fila se descarta
+      (no se inventa un vencimiento) y se reporta en stats['sin_fecha_final'].
     - 'N/A' = el curso no le aplica a esa persona. Celda vacia = pendiente.
     - solo_cursos: si hay lista, solo esos cursos se controlan; las demas columnas con fechas se ignoran."""
     df = _renombrar_conservando(df, ALIAS_DOCUMENTOS)
@@ -456,8 +458,10 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
                     fechas_ok[r] = f
                 else:
                     malas.append(v)
+            quien = f"{nombre_persona or '?'} (cedula {cedula})"
+            ubic = f"Hoja '{hoja}', " if hoja else ""
             for v in malas:
-                stats["errores"].append(f"Matriz fila {fila}, columna '{c['nombre']}': fecha invalida '{v}' — omitida")
+                stats["errores"].append(f"{ubic}fila {fila}, {quien}, columna '{c['nombre']}': fecha invalida '{v}' — omitida, corrijala en el archivo")
             if not fechas_ok:
                 if not malas:                                     # todo N/A
                     filas.append({**base_fila, "documento": c["nombre"], "no_aplica": "1"})
@@ -465,8 +469,10 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
             if c["par"]:
                 emision = fechas_ok.get("ini")
                 venc = fechas_ok.get("fin")
-                if not venc and emision and c["vigencia"]:
-                    venc = (date.fromisoformat(emision) + timedelta(days=c["vigencia"])).isoformat()
+                if not venc:                                      # sin fecha final: se descarta, no se inventa
+                    if not malas:
+                        stats["sin_fecha_final"][c["nombre"]] = stats["sin_fecha_final"].get(c["nombre"], 0) + 1
+                    continue
             elif fechas == "emision":
                 emision = fechas_ok["col"]
                 venc = (date.fromisoformat(emision) + timedelta(days=c["vigencia"])).isoformat()
@@ -661,7 +667,7 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
 
     stats = {"empresas": set(), "responsables": 0, "nuevos": 0, "actualizados": 0,
              "sin_vencimiento": 0, "requisitos": 0, "personas_matriz": 0, "no_aplica": 0, "retirados": 0,
-             "columnas_ignoradas": [], "columnas_no_controladas": [], "hojas_ignoradas": [], "errores": []}
+             "sin_fecha_final": {}, "columnas_ignoradas": [], "columnas_no_controladas": [], "hojas_ignoradas": [], "errores": []}
     if verbose:
         print(f"Leyendo: {ruta.name if ruta else 'hojas en memoria'}")
     for df in empresas:
@@ -670,7 +676,8 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
         if modo == "largo":
             _importar_documentos(cur, df, empresa_defecto, stats)
         elif modo == "matriz":
-            _importar_matriz(cur, df, empresa_defecto, stats, fechas, vigencia_defecto, solo_cursos, exigir_cursos)
+            _importar_matriz(cur, df, empresa_defecto, stats, fechas, vigencia_defecto, solo_cursos, exigir_cursos,
+                             hoja=nombre_hoja)
         else:
             stats["hojas_ignoradas"].append(nombre_hoja)
     for df in requisitos:
@@ -698,6 +705,9 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
         print(f"  Sin fecha de vencimiento (no generan alertas): {stats['sin_vencimiento']}")
         if stats["columnas_ignoradas"]:
             print(f"  Columnas de la matriz ignoradas (sin fechas): {', '.join(stats['columnas_ignoradas'])}")
+        if stats["sin_fecha_final"]:
+            det = ", ".join(f"{k}: {v}" for k, v in stats["sin_fecha_final"].items())
+            print(f"  Descartados por no traer fecha final -> {det}")
         if stats["columnas_no_controladas"]:
             print(f"  Columnas fuera de los cursos controlados: {', '.join(stats['columnas_no_controladas'])}")
         if stats["hojas_ignoradas"]:

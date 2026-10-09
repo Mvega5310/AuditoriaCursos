@@ -37,6 +37,7 @@
     <li>Sin fecha de vencimiento (se guardan pero no generan alertas): {{ stats.sin_vencimiento }}</li>
   </ul>
   {% if stats.no_aplica %}<p class="mut">Cursos marcados «N/A» (no le aplican a esa persona): {{ stats.no_aplica }}</p>{% endif %}
+  {% if stats.sin_fecha_final %}<p class="mut">Descartados por tener fecha de inicio pero no fecha final: {% for k, v in stats.sin_fecha_final.items() %}{{ k }} ({{ v }}){{ ", " if not loop.last }}{% endfor %}.</p>{% endif %}
   {% if stats.retirados %}<p class="mut">Personal retirado pasado a inactivo: {{ stats.retirados }}</p>{% endif %}
   {% if stats.columnas_no_controladas %}<p class="mut">Columnas con fechas que se ignoraron por no estar en «Qué cursos controlar»: {{ stats.columnas_no_controladas|length }} (<a href="{{ url_for('hoja_google') }}">ver o cambiar</a>).</p>{% endif %}
   {% if stats.columnas_ignoradas %}<p class="mut">Columnas ignoradas por no tener fechas: {{ stats.columnas_ignoradas|join(', ') }}</p>{% endif %}
