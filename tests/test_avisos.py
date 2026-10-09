@@ -98,3 +98,20 @@ def test_avisos_por_empresa(app, tmp_path, monkeypatch):
 
     c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30"})   # ninguna marcada
     assert generar_alertas.configuracion_empresa(conn, eid)["activas"] == set()
+
+
+def test_excel_del_panel_no_ejecuta_formulas(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Cedula", "Nombre", "Apellido", "Cargo", "Area", "Documento", "Fecha Vencimiento"])
+    ws.append(["105", "=HYPERLINK(\"http://x\",\"clic\")", "", "Auxiliar", "UCI", "BLS", _f(3)])
+    ws["B2"].data_type = "s"                       # texto que empieza por "=", como lo guardaria un usuario
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    subir(c, buf)
+    x = c.get("/panel.xlsx")
+    wb = openpyxl.load_workbook(io.BytesIO(x.data))
+    celda = wb["Vencimientos"]["A2"]
+    assert celda.data_type == "s" and celda.value.startswith("=HYPERLINK")

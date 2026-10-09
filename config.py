@@ -102,6 +102,9 @@ FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
 APP_URL = (os.getenv("APP_URL") or "http://localhost:8000").rstrip("/")
 # 1 en produccion (HTTPS): la cookie de sesion solo viaja por conexiones seguras
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
+# 1 solo si la app esta detras de UN proxy de confianza (Railway): toma la IP real de X-Forwarded-For.
+# En local dejelo en 0: si no hay proxy, cualquiera podria falsear esa cabecera.
+TRUST_PROXY = os.getenv("TRUST_PROXY", "0") == "1"
 # 1 = la propia app ejecuta las alertas programadas (necesario en Railway: el volumen se une a un solo servicio)
 RUN_SCHEDULER = os.getenv("RUN_SCHEDULER", "0") == "1"
 MAX_UPLOAD_MB = 5

@@ -44,6 +44,10 @@ INTENTOS_MAX, VENTANA_SEG = 5, 15 * 60
 
 def create_app(overrides: dict | None = None) -> Flask:
     app = Flask(__name__, template_folder=str(BASE_DIR / "templates" / "web"))
+    if config.TRUST_PROXY:
+        # Detras del proxy de Railway: la IP real del cliente viene en X-Forwarded-For (limite de intentos de login)
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     app.config.update(
         SECRET_KEY=config.FLASK_SECRET_KEY,
         DB_PATH=config.DB_PATH,
@@ -293,17 +297,24 @@ def create_app(overrides: dict | None = None) -> Flask:
         from flask import Response
         from openpyxl.styles import Font
         datos = _vencimientos_filtrados()
+        def agregar(hoja, valores):
+            """Los datos importados se escriben siempre como texto, nunca como formula (inyeccion en Excel)."""
+            hoja.append(valores)
+            for c in hoja[hoja.max_row]:
+                if c.data_type == "f":
+                    c.data_type = "s"
+
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Vencimientos"
         ws.append(["Titular", "Cédula", "Ubicación", "Ubicación / cargo", "Documento", "Vence", "Días", "Estado"])
         for r in datos["registros"]:
-            ws.append([r["titular"], r["identificacion"], r["area"], r["area_cargo"], r["documento"],
-                       r["fecha_vencimiento"], r["dias"], r["estado_label"]])
+            agregar(ws, [r["titular"], r["identificacion"], r["area"], r["area_cargo"], r["documento"],
+                         r["fecha_vencimiento"], r["dias"], r["estado_label"]])
         wf = wb.create_sheet("Sin registrar")
         wf.append(["Persona", "Cédula", "Ubicación / cargo", "Faltan", "Cantidad"])
         for x in datos["faltantes"]:
-            wf.append([x["titular"], x["identificacion"], x["area_cargo"], x["faltan"], x["cantidad"]])
+            agregar(wf, [x["titular"], x["identificacion"], x["area_cargo"], x["faltan"], x["cantidad"]])
         for hoja in (ws, wf):
             for c in hoja[1]:
                 c.font = Font(bold=True)

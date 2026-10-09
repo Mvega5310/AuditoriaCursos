@@ -212,6 +212,6 @@ Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada 
 
 1. Proyecto nuevo desde este repositorio de GitHub (usa el `Dockerfile`) y un servicio **PostgreSQL** en el mismo proyecto.
 2. Variables del servicio web: `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `FLASK_SECRET_KEY`, `APP_URL` (dominio público),
-   `COOKIE_SECURE=1`, `RUN_SCHEDULER=1`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `RRHH_EMAIL`, `ADMIN_EMAIL`.
+   `COOKIE_SECURE=1`, `TRUST_PROXY=1`, `RUN_SCHEDULER=1`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `RRHH_EMAIL`, `ADMIN_EMAIL`.
 3. Generar un dominio público. Las alertas programadas corren dentro del mismo proceso (`RUN_SCHEDULER=1`), por eso el servicio debe
    mantener **una sola réplica**.

@@ -16,3 +16,14 @@ salidas/
 
 # Datos de prueba generados
 datos_prueba.xlsx
+
+# Archivos de clientes: tienen datos personales (cedulas, salud). Nunca al repositorio.
+*.xlsx
+*.xls
+*.csv
+!tests/fixtures/*.xlsx
+
+# Credenciales de Google (cuenta de servicio): solo en la variable GOOGLE_SERVICE_ACCOUNT_JSON
+*service-account*.json
+*service_account*.json
+credenciales*.json
