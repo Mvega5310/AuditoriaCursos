@@ -5,8 +5,9 @@
 <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
   <label for="anticipacion">Anticipación: días que necesita para gestionar una renovación (agendar el curso, el examen…)</label>
   <input id="anticipacion" name="anticipacion" type="number" min="{{ rango[0] }}" max="{{ rango[1] }}" value="{{ conf.anticipacion }}" required style="max-width:160px">
-  <label for="dia_semanal">Día de la semana del aviso semanal <span class="mut">(elija otro si el lunes suele ser festivo)</span></label>
+  <label for="dia_semanal">Día de la semana del aviso semanal <span class="mut">(si cae en festivo, se envía el siguiente día hábil)</span></label>
   <select id="dia_semanal" name="dia_semanal" style="max-width:240px">{% for d in dias %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == conf.dia_semanal }}>{{ d|capitalize }}</option>{% endfor %}</select>
+  {% if 'semanal' in conf.activas %}<p class="mut" style="margin:8px 0 0">Próximo aviso semanal: <b style="color:var(--tx)">{{ proximo }}</b>. Se tienen en cuenta los festivos de Colombia.</p>{% endif %}
   <h2 style="margin-top:28px">Qué avisos recibe</h2>
   <div class="tabla"><table><tr><th></th><th>Aviso</th><th>Cuándo llega</th><th>Ventana con su anticipación</th></tr>
   {% for t, a in alertas.items() %}<tr>

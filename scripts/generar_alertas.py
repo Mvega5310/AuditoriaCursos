@@ -25,6 +25,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
+import calendario
 import core
 import correo
 from core import conectar, es_v1, hoy, dias_restantes, clasificar, normalizar
@@ -191,7 +192,8 @@ def _slug(texto: str) -> str:
 
 def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_PATH,
                     respetar_dia: bool = False) -> None:
-    """respetar_dia=True (lo usa el programador): el aviso semanal solo sale a las empresas cuyo dia elegido es hoy.
+    """respetar_dia=True (lo usa el programador): el aviso semanal solo sale a las empresas cuyo dia elegido es hoy
+    (o, si ese dia fue festivo, el siguiente dia habil; ver calendario.toca_semanal).
     Las ejecuciones manuales (script, pruebas) no filtran por dia."""
     if tipo not in ALERTAS:
         log.error(f"Tipo invalido: '{tipo}'. Opciones: {list(ALERTAS.keys())}")
@@ -220,8 +222,9 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
             if tipo not in conf["activas"]:
                 log.info(f"[{emp['nombre']}] La empresa no recibe la alerta '{tipo}'. Omitida.")
                 continue
-            if tipo == "semanal" and respetar_dia and conf["dia_semanal"] != hoy().weekday():
-                log.info(f"[{emp['nombre']}] Su aviso semanal es el {DIAS_SEMANA[conf['dia_semanal']]}. Omitida hoy.")
+            if tipo == "semanal" and respetar_dia and not calendario.toca_semanal(hoy(), conf["dia_semanal"]):
+                log.info(f"[{emp['nombre']}] Su aviso semanal es el {DIAS_SEMANA[conf['dia_semanal']]} "
+                         f"(si es festivo sale el siguiente dia habil). Omitida hoy.")
                 continue
             dias = conf["ventanas"][tipo]
             registros = consultar_vencimientos(conn, emp["id"], dias)

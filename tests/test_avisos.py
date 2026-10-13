@@ -157,8 +157,8 @@ def test_programador_envia_el_semanal_solo_en_el_dia_de_cada_empresa(app, tmp_pa
     salidas = tmp_path / "salidas"
     monkeypatch.setattr(generar_alertas, "SALIDAS_DIR", salidas)
 
-    def corre(dia_iso, **kw):                      # fecha de una semana conocida: 2026-10-12 es lunes
-        monkeypatch.setattr(generar_alertas, "hoy", lambda: __import__("datetime").date(2026, 10, 12 + dia_iso))
+    def corre(dia_iso, **kw):                      # semana sin festivos: 2026-10-19 es lunes
+        monkeypatch.setattr(generar_alertas, "hoy", lambda: __import__("datetime").date(2026, 10, 19 + dia_iso))
         for f in salidas.glob("*") if salidas.exists() else []:
             f.unlink()
         generar_alertas.ejecutar_alerta("semanal", dry_run=True, db_path=app.config["DB_PATH"], **kw)
@@ -178,3 +178,11 @@ def test_el_programador_revisa_el_semanal_de_lunes_a_viernes():
     job = sch.get_job("alerta_semanal")
     assert str(job.trigger.fields[job.trigger.FIELD_NAMES.index("day_of_week")]) == "mon-fri"
     assert job.kwargs == {"respetar_dia": True}
+
+
+def test_avisos_muestra_el_proximo_envio_semanal(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    html = c.get("/avisos").data.decode()
+    assert "Próximo aviso semanal:" in html and "festivos de Colombia" in html
+    c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30", "dia_semanal": "1", "alertas": ["mensual"]})
+    assert "Próximo aviso semanal:" not in c.get("/avisos").data.decode()          # semanal desactivado: no se anuncia

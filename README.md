@@ -215,3 +215,11 @@ Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada 
    `COOKIE_SECURE=1`, `TRUST_PROXY=1`, `RUN_SCHEDULER=1`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `RRHH_EMAIL`, `ADMIN_EMAIL`.
 3. Generar un dominio público. Las alertas programadas corren dentro del mismo proceso (`RUN_SCHEDULER=1`), por eso el servicio debe
    mantener **una sola réplica**.
+
+## Aviso semanal y festivos
+
+Cada empresa elige en **Avisos** el día de la semana (lunes a viernes) en que recibe el aviso semanal. El programador lo revisa
+de lunes a viernes a las 07:30 (hora de Colombia) y lo envía a cada empresa el día que eligió. Si ese día es **festivo en Colombia**
+(paquete `holidays`, con los traslados a lunes), el aviso sale el **siguiente día hábil**; si hay varios festivos seguidos
+(Semana Santa), sale el primer día hábil después de ellos. La lógica está en `calendario.py`. La diaria, la quincenal y la mensual
+conservan su horario fijo.

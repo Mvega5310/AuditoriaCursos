@@ -357,8 +357,11 @@ def create_app(overrides: dict | None = None) -> Flask:
             conn.commit()
             flash("Avisos guardados." if activas else "Avisos guardados. Ojo: no recibirá ningún correo.", "ok")
             return redirect(url_for("avisos"))
-        return render_template("avisos.html", conf=configuracion_empresa(conn, eid), alertas=ALERTAS,
-                               rango=ANTICIPACION_RANGO, dias=DIAS_SEMANA)
+        import calendario
+        conf = configuracion_empresa(conn, eid)
+        proximo = calendario.proximo_envio_semanal(conf["dia_semanal"])
+        return render_template("avisos.html", conf=conf, alertas=ALERTAS, rango=ANTICIPACION_RANGO, dias=DIAS_SEMANA,
+                               proximo=f"{DIAS_SEMANA[proximo.weekday()]} {proximo.strftime('%d/%m/%Y')}")
 
     @app.route("/importar", methods=["GET", "POST"])
     @login_requerido
