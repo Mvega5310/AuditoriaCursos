@@ -53,6 +53,7 @@ def registrar_jobs(scheduler) -> None:
         ejecutar_alerta,
         CronTrigger(day_of_week="mon-fri", hour=7, minute=0, timezone=ZONA_HORARIA),
         args=["diaria"],
+        kwargs={"respetar_dia": True},
         id="alerta_diaria",
         name="Alerta diaria — vencidos y 7 dias",
         misfire_grace_time=3600,  # tolera hasta 1h de retraso si el PC estaba apagado
@@ -69,21 +70,23 @@ def registrar_jobs(scheduler) -> None:
         misfire_grace_time=3600,
     )
 
-    # Alerta quincenal: dias 1 y 15 de cada mes, 08:00
+    # Alerta quincenal: dias 1 y 15 (si cae en fin de semana o festivo, el siguiente dia habil). Se revisa lun-vie a las 08:00
     scheduler.add_job(
         ejecutar_alerta,
-        CronTrigger(day="1,15", hour=8, minute=0, timezone=ZONA_HORARIA),
+        CronTrigger(day_of_week="mon-fri", hour=8, minute=0, timezone=ZONA_HORARIA),
         args=["quincenal"],
+        kwargs={"respetar_dia": True},
         id="alerta_quincenal",
         name="Alerta quincenal — 15 dias + anticipacion",
         misfire_grace_time=3600,
     )
 
-    # Reporte mensual: dia 1 de cada mes, 08:30
+    # Reporte mensual: dia 1 (si cae en fin de semana o festivo, el siguiente dia habil). Se revisa lun-vie a las 08:30
     scheduler.add_job(
         ejecutar_alerta,
-        CronTrigger(day=1, hour=8, minute=30, timezone=ZONA_HORARIA),
+        CronTrigger(day_of_week="mon-fri", hour=8, minute=30, timezone=ZONA_HORARIA),
         args=["mensual"],
+        kwargs={"respetar_dia": True},
         id="reporte_mensual",
         name="Reporte mensual — 30 dias + anticipacion",
         misfire_grace_time=3600,
@@ -97,10 +100,10 @@ def main() -> None:
     log.info("=== Vencimientos: programador iniciado ===")
     log.info(f"  Zona horaria : {ZONA_HORARIA}")
     log.info("  Google Sheets    : todos los dias a las 06:30")
-    log.info("  Alerta diaria    : Lun-Vie a las 07:00")
-    log.info("  Alerta semanal   : Lunes  a las 07:30")
-    log.info("  Alerta quincenal : Dias 1 y 15 a las 08:00")
-    log.info("  Reporte mensual  : Dia 1  a las 08:30")
+    log.info("  Alerta diaria    : dias habiles a las 07:00")
+    log.info("  Alerta semanal   : el dia que elija cada empresa, 07:30 (festivo -> siguiente dia habil)")
+    log.info("  Alerta quincenal : dias 1 y 15, 08:00 (fin de semana o festivo -> siguiente dia habil)")
+    log.info("  Reporte mensual  : dia 1, 08:30 (fin de semana o festivo -> siguiente dia habil)")
     log.info("Presiona Ctrl+C para detener.")
 
     try:

@@ -221,5 +221,7 @@ Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada 
 Cada empresa elige en **Avisos** el día de la semana (lunes a viernes) en que recibe el aviso semanal. El programador lo revisa
 de lunes a viernes a las 07:30 (hora de Colombia) y lo envía a cada empresa el día que eligió. Si ese día es **festivo en Colombia**
 (paquete `holidays`, con los traslados a lunes), el aviso sale el **siguiente día hábil**; si hay varios festivos seguidos
-(Semana Santa), sale el primer día hábil después de ellos. La lógica está en `calendario.py`. La diaria, la quincenal y la mensual
-conservan su horario fijo.
+(Semana Santa), sale el primer día hábil después de ellos. La lógica está en `calendario.py`.
+
+Las demás alertas siguen la misma regla: la **diaria** no se envía en festivos ni fines de semana, y la **quincenal** (días 1 y 15) y la
+**mensual** (día 1) se corren al siguiente día hábil cuando esa fecha cae en fin de semana o festivo.

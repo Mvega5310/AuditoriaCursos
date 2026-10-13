@@ -186,3 +186,33 @@ def test_avisos_muestra_el_proximo_envio_semanal(app):
     assert "Próximo aviso semanal:" in html and "festivos de Colombia" in html
     c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30", "dia_semanal": "1", "alertas": ["mensual"]})
     assert "Próximo aviso semanal:" not in c.get("/avisos").data.decode()          # semanal desactivado: no se anuncia
+
+
+def test_motor_aplica_el_calendario_a_diaria_quincenal_y_mensual(app, tmp_path, monkeypatch):
+    from datetime import date
+    import calendario
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    subir(c, _excel(FILAS))
+    salidas = tmp_path / "salidas"
+    monkeypatch.setattr(generar_alertas, "SALIDAS_DIR", salidas)
+    original = calendario.toca_hoy
+
+    def corre(tipo, fecha_calendario):
+        # solo la FECHA del calendario se simula; los documentos se evaluan con la fecha real
+        monkeypatch.setattr(calendario, "toca_hoy", lambda t, _h, dia=0: original(t, fecha_calendario, dia))
+        for f in (salidas.glob("*") if salidas.exists() else []):
+            f.unlink()
+        generar_alertas.ejecutar_alerta(tipo, dry_run=True, db_path=app.config["DB_PATH"], respetar_dia=True)
+        return sorted(p.name for p in salidas.glob("*")) if salidas.exists() else []
+
+    assert corre("diaria", date(2026, 10, 12)) == []                                        # festivo
+    assert corre("diaria", date(2026, 10, 10)) == []                                        # sabado
+    assert corre("diaria", date(2026, 10, 13)) == ["alerta_diaria_hospital_z.html"]
+    assert corre("mensual", date(2026, 8, 1)) == []                                         # 1 de agosto: sabado
+    assert corre("mensual", date(2026, 8, 3)) == ["alerta_mensual_hospital_z.html"]         # sale el lunes 3
+    assert corre("mensual", date(2026, 8, 4)) == []
+    assert corre("quincenal", date(2026, 10, 14)) == []
+    assert corre("quincenal", date(2026, 10, 15)) == ["alerta_quincenal_hospital_z.html"]
+    # una ejecucion manual (sin respetar_dia) no consulta el calendario
+    generar_alertas.ejecutar_alerta("mensual", dry_run=True, db_path=app.config["DB_PATH"])
+    assert (salidas / "alerta_mensual_hospital_z.html").exists()

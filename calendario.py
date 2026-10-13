@@ -1,9 +1,12 @@
 """
 Calendario laboral de Colombia: dias habiles y fecha de envio del aviso semanal.
 
-Regla del aviso semanal: cada empresa elige un dia (lunes a viernes). Si ese dia es festivo, el aviso sale
-el SIGUIENTE dia habil, para que no se pierda. Si hay varios festivos seguidos (Semana Santa), sale el primer
-dia habil despues de ellos.
+Reglas (todas usan dias habiles de Colombia, lunes a viernes sin festivos):
+  - Diaria:    solo sale en dia habil (no se envia en festivos ni fines de semana).
+  - Semanal:   cada empresa elige un dia (lunes a viernes). Si es festivo, sale el SIGUIENTE dia habil.
+  - Quincenal: dias 1 y 15. Si caen en fin de semana o festivo, sale el siguiente dia habil.
+  - Mensual:   dia 1. Misma regla.
+Si hay varios dias no habiles seguidos (Semana Santa, puentes), sale el primer dia habil despues de ellos.
 """
 import logging
 from datetime import date, datetime, timedelta
@@ -38,6 +41,38 @@ def es_habil(d: date) -> bool:
     return d.weekday() < 5 and not es_festivo(d)
 
 
+def _toca(hoy: date, coincide) -> bool:
+    """Regla comun: hoy es habil y `coincide(d)` se cumple hoy o en algun dia no habil JUSTO antes de hoy
+    (el envio programado se corrio al siguiente dia habil)."""
+    if not es_habil(hoy):
+        return False
+    d = hoy
+    while True:
+        if coincide(d):
+            return True
+        d -= timedelta(days=1)
+        if es_habil(d):
+            return False
+
+
+def toca_dia_del_mes(hoy: date, dias_del_mes: tuple[int, ...]) -> bool:
+    """True si hoy sale el aviso programado para esos dias del mes (p. ej. (1, 15)), corrido al siguiente habil."""
+    return _toca(hoy, lambda d: d.day in dias_del_mes)
+
+
+def toca_hoy(tipo: str, hoy: date, dia_semanal: int = 0) -> bool:
+    """Decide si hoy corresponde enviar la alerta `tipo` (diaria | semanal | quincenal | mensual)."""
+    if tipo == "diaria":
+        return es_habil(hoy)
+    if tipo == "semanal":
+        return toca_semanal(hoy, dia_semanal)
+    if tipo == "quincenal":
+        return toca_dia_del_mes(hoy, (1, 15))
+    if tipo == "mensual":
+        return toca_dia_del_mes(hoy, (1,))
+    raise ValueError(f"tipo de alerta desconocido: {tipo}")
+
+
 def toca_semanal(hoy: date, dia_semanal: int) -> bool:
     """True si HOY se debe enviar el aviso semanal de una empresa que eligio `dia_semanal` (0 = lunes ... 4 = viernes).
 
@@ -46,15 +81,7 @@ def toca_semanal(hoy: date, dia_semanal: int) -> bool:
     - Si el dia elegido (o una cadena de dias seguidos que lo incluye) fue festivo o fin de semana justo antes de hoy,
       el aviso se corrio y sale hoy, el primer dia habil despues.
     """
-    if not es_habil(hoy):
-        return False
-    d = hoy
-    while True:
-        if d.weekday() == dia_semanal:
-            return True
-        d -= timedelta(days=1)
-        if es_habil(d):
-            return False
+    return _toca(hoy, lambda d: d.weekday() == dia_semanal)
 
 
 def proximo_envio_semanal(dia_semanal: int, ahora: datetime | None = None) -> date:

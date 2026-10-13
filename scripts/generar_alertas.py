@@ -192,8 +192,9 @@ def _slug(texto: str) -> str:
 
 def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_PATH,
                     respetar_dia: bool = False) -> None:
-    """respetar_dia=True (lo usa el programador): el aviso semanal solo sale a las empresas cuyo dia elegido es hoy
-    (o, si ese dia fue festivo, el siguiente dia habil; ver calendario.toca_semanal).
+    """respetar_dia=True (lo usa el programador): aplica el calendario laboral de Colombia (ver calendario.py).
+    La diaria no sale en festivos; la quincenal y la mensual se corren al siguiente dia habil; el aviso semanal solo
+    sale a las empresas cuyo dia elegido es hoy (o, si fue festivo, el siguiente dia habil).
     Las ejecuciones manuales (script, pruebas) no filtran por dia."""
     if tipo not in ALERTAS:
         log.error(f"Tipo invalido: '{tipo}'. Opciones: {list(ALERTAS.keys())}")
@@ -208,6 +209,10 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
     try:
         if es_v1(conn):
             log.error("La base de datos es del esquema anterior. Ejecute primero: python scripts/migrar_v1.py")
+            return
+
+        if respetar_dia and tipo != "semanal" and not calendario.toca_hoy(tipo, hoy()):
+            log.info(f"Alerta '{tipo}': hoy no corresponde enviarla (festivo, fin de semana o su fecha ya paso). Omitida.")
             return
 
         log.info(f"=== Alerta '{tipo}' — vencidos + ventana = {config['periodo']} dias de periodo + anticipacion de "

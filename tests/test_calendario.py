@@ -74,3 +74,43 @@ def test_proximo_envio():
     # martes 13 a las 6:00 (antes de las 7:30) -> sale hoy; a las 8:00 ya paso -> la semana siguiente
     assert calendario.proximo_envio_semanal(MAR, bogota.localize(datetime(2026, 10, 13, 6, 0))) == date(2026, 10, 13)
     assert calendario.proximo_envio_semanal(MAR, bogota.localize(datetime(2026, 10, 13, 8, 0))) == date(2026, 10, 20)
+
+
+# ------------------------------------------------------------ quincenal, mensual y diaria
+
+@pytest.mark.parametrize("hoy,dias,esperado", [
+    (date(2026, 8, 1), (1,), False),      # sabado 1 de agosto: no sale
+    (date(2026, 8, 3), (1,), True),       # ... sale el lunes 3
+    (date(2026, 8, 4), (1,), False),      # y no se repite
+    (date(2026, 11, 2), (1,), False),     # 1/11 domingo + lunes 2/11 festivo
+    (date(2026, 11, 3), (1,), True),      # ... sale el martes 3
+    (date(2026, 10, 1), (1,), True),      # jueves 1/10: dia habil normal
+    (date(2026, 10, 15), (1, 15), True),  # jueves 15
+    (date(2026, 8, 17), (1, 15), False),  # lunes festivo (Asuncion): el 15/8 fue sabado -> sale el martes 18
+    (date(2026, 8, 18), (1, 15), True),
+    (date(2026, 10, 16), (1, 15), False), # el dia siguiente al 15 no cuenta
+])
+def test_toca_dia_del_mes(hoy, dias, esperado):
+    assert calendario.toca_dia_del_mes(hoy, dias) is esperado
+
+
+def test_toca_hoy_por_tipo():
+    festivo, habil, sabado = date(2026, 10, 12), date(2026, 10, 13), date(2026, 10, 10)
+    assert not calendario.toca_hoy("diaria", festivo) and not calendario.toca_hoy("diaria", sabado)
+    assert calendario.toca_hoy("diaria", habil)
+    assert calendario.toca_hoy("semanal", habil, 0) and not calendario.toca_hoy("semanal", habil, 3)
+    assert calendario.toca_hoy("mensual", date(2026, 8, 3)) and calendario.toca_hoy("quincenal", date(2026, 8, 3))
+    with pytest.raises(ValueError):
+        calendario.toca_hoy("anual", habil)
+
+
+def test_el_programador_respeta_el_calendario_en_las_cuatro_alertas():
+    import scheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    sch = BackgroundScheduler(timezone="America/Bogota")
+    scheduler.registrar_jobs(sch)
+    for id_ in ("alerta_diaria", "alerta_semanal", "alerta_quincenal", "reporte_mensual"):
+        job = sch.get_job(id_)
+        assert job.kwargs == {"respetar_dia": True}, id_
+        assert str(job.trigger.fields[job.trigger.FIELD_NAMES.index("day_of_week")]) == "mon-fri", id_
+
