@@ -132,9 +132,9 @@ def create_app(overrides: dict | None = None) -> Flask:
             log.warning("Correo no configurado: enlace de verificacion para %s -> %s", email, enlace)
             return
         from scripts.generar_alertas import enviar_email
-        html = (f"<p>Bienvenido a autCursos.</p><p>Confirme su correo para activar la cuenta "
+        html = (f"<p>Bienvenido a Vencimientos.</p><p>Confirme su correo para activar la cuenta "
                 f"(el enlace vence en 48 horas):</p><p><a href='{enlace}'>{enlace}</a></p>")
-        enviar_email("Confirme su cuenta en autCursos", html, [email])
+        enviar_email("Confirme su cuenta en Vencimientos", html, [email])
 
     def bloqueado(clave: str) -> bool:
         ahora = time.time()
@@ -393,7 +393,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         from flask import Response
         from plantilla import construir_plantilla
         return Response(construir_plantilla(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        headers={"Content-Disposition": "attachment; filename=plantilla_autcursos.xlsx"})
+                        headers={"Content-Disposition": "attachment; filename=plantilla_vencimientos.xlsx"})
 
     @app.get("/alertas")
     @login_requerido

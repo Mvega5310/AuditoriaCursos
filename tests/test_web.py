@@ -257,4 +257,11 @@ def test_estaticos_y_menu_lateral(app):
     for destino in (b'/importar', b'/alertas', b'/responsables'):
         assert destino in html
     assert b'class="act"' in html or b'act"' in html            # el item activo se marca
-    assert b"Tu aprendizaje, sin l" in app.test_client().get("/login").data
+    assert "Documentos al día, sin sorpresas".encode() in app.test_client().get("/login").data
+
+
+def test_titulo_de_pestana_y_paginas_de_error(app):
+    c = app.test_client()
+    assert "Ingresar · Vencimientos".encode() in c.get("/login").data
+    r = c.get("/ruta-que-no-existe")                       # las paginas de error no definen titulo: no deben fallar
+    assert r.status_code == 404 and b"<title>Vencimientos</title>" in r.data

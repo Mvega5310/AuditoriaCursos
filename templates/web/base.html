@@ -1,7 +1,8 @@
 {% from "_iconos.html" import ico %}
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block titulo %}autCursos{% endblock %} · autCursos</title>
+{% set pagina %}{% block titulo %}{% endblock %}{% endset %}
+<title>{% if pagina|trim %}{{ pagina|trim }} · {% endif %}Vencimientos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
@@ -16,7 +17,7 @@
 <header class="top">
   {% if usuario %}<button type="button" class="btn-menu" id="btn-menu" aria-label="Abrir menú">{{ ico("menu", 22) }}</button>{% endif %}
   <a class="marca" href="{{ url_for('inicio') }}"><span class="logo">{{ ico("capas", 24) }}</span>
-    <span><b>autCursos</b><small>Tu aprendizaje, sin límites</small></span></a>
+    <span><b>Vencimientos</b><small>Documentos al día, sin sorpresas</small></span></a>
   {% if usuario %}
   <details class="usuario esp"><summary><span class="avatar">{{ usuario.empresa[:1]|upper }}</span><span class="n">{{ usuario.empresa }}</span>{{ ico("down", 16) }}</summary>
     <div class="menu"><p><b>{{ usuario.empresa }}</b><br><span class="mut">{{ usuario.email }}</span></p>

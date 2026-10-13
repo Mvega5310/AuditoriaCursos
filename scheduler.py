@@ -93,7 +93,7 @@ def main() -> None:
     scheduler = BlockingScheduler(timezone=ZONA_HORARIA)
     registrar_jobs(scheduler)
 
-    log.info("=== autCursos Scheduler iniciado ===")
+    log.info("=== Vencimientos: programador iniciado ===")
     log.info(f"  Zona horaria : {ZONA_HORARIA}")
     log.info("  Google Sheets    : todos los dias a las 06:30")
     log.info("  Alerta diaria    : Lun-Vie a las 07:00")

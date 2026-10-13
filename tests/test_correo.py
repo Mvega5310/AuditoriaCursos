@@ -21,7 +21,7 @@ def _sin_esperas(monkeypatch):
 
 def _resend(monkeypatch):
     monkeypatch.setattr(config, "RESEND_API_KEY", "re_test")
-    monkeypatch.setattr(config, "EMAIL_FROM", "autCursos <alertas@dominio.com>")
+    monkeypatch.setattr(config, "EMAIL_FROM", "Vencimientos <alertas@dominio.com>")
 
 
 def test_proveedor_prefiere_resend(monkeypatch):

@@ -47,7 +47,7 @@ def _enviar_resend(asunto: str, html: str, para: list[str], cco: list[str]) -> N
         "https://api.resend.com/emails",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Authorization": f"Bearer {config.RESEND_API_KEY}", "Content-Type": "application/json",
-                 "User-Agent": "autcursos/1.0"},
+                 "User-Agent": "vencimientos/1.0"},
         method="POST",
     )
     try:

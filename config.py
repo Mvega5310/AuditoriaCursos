@@ -10,7 +10,7 @@ GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
 
 # Resend (API HTTPS): obligatorio en Railway, que bloquea el SMTP saliente. EMAIL_FROM debe ser de un dominio verificado en Resend.
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-EMAIL_FROM = os.getenv("EMAIL_FROM")          # p. ej. "autCursos <alertas@sudominio.com>"
+EMAIL_FROM = os.getenv("EMAIL_FROM")          # p. ej. "Vencimientos <alertas@sudominio.com>"
 
 # Destinatario de respaldo: recibe la alerta de una empresa que no tiene responsables registrados
 RRHH_EMAIL = os.getenv("RRHH_EMAIL")

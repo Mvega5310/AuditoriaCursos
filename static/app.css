@@ -1,4 +1,4 @@
-/* autCursos — sistema de diseño (SaaS claro, degradados suaves, tarjetas con vidrio) */
+/* Vencimientos — sistema de diseño (SaaS claro, degradados suaves, tarjetas con vidrio) */
 :root{
   --pri:#2563EB;--sec:#4F46E5;--acc:#7C3AED;--bg:#F4F8FF;--card:#FFFFFF;--tx:#102A43;--mut:#52708C;--bd:#D9E5F2;--ok:#16803C;--err:#B42318;
   --ac:var(--pri);                                  /* alias usado por plantillas antiguas */

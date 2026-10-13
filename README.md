@@ -1,4 +1,4 @@
-# autCursos — Control de vencimientos de documentación (multi-empresa)
+# Vencimientos — Control de vencimientos de documentación (multi-empresa)
 
 Controla, para **varias empresas**, los vencimientos de:
 
