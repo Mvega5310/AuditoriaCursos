@@ -9,6 +9,7 @@ Uso local:   python web.py            -> http://localhost:8000
 Produccion:  gunicorn 'web:create_app()' --workers 1 --threads 4
              (un solo worker: SQLite, el limite de intentos de login y el scheduler viven en el proceso)
 """
+import hashlib
 import logging
 import mimetypes
 import os
@@ -113,6 +114,21 @@ def create_app(overrides: dict | None = None) -> Flask:
             session["csrf"] = secrets.token_hex(16)
         return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"],
                 "app_url": config.APP_URL}
+
+    huellas: dict[str, str] = {}
+
+    @app.url_defaults
+    def _version_estaticos(endpoint, values):
+        """Cada url_for('static', ...) lleva ?v=<huella del contenido>: el navegador guarda el archivo un dia, pero si
+        cambia en un despliegue la URL cambia y lo vuelve a descargar (sin quedarse con estilos viejos)."""
+        if endpoint != "static" or "v" in values or "filename" not in values:
+            return
+        nombre = values["filename"]
+        if nombre not in huellas:
+            ruta = Path(app.static_folder) / nombre
+            huellas[nombre] = hashlib.md5(ruta.read_bytes()).hexdigest()[:10] if ruta.is_file() else ""
+        if huellas[nombre]:
+            values["v"] = huellas[nombre]
 
     @app.after_request
     def _cabeceras(resp):

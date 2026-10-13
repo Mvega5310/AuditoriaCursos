@@ -29,3 +29,14 @@ def test_correo_lleva_el_logo_con_url_absoluta():
     html = generar_alertas.renderizar_html([], "semanal", "Hospital Z", [])
     assert "/static/marca/logo-correo.png" in html and 'alt="Vencimientos"' in html
     assert 'src="http' in html                                            # los correos no aceptan rutas relativas
+
+
+def test_estaticos_llevan_version_segun_su_contenido(app):
+    import hashlib
+    import re
+    html = app.test_client().get("/login").data.decode()
+    huella = hashlib.md5((BASE_DIR / "static" / "app.css").read_bytes()).hexdigest()[:10]
+    assert f"/static/app.css?v={huella}" in html                                   # cambia si cambia el CSS
+    assert re.search(r"/static/marca/favicon\.svg\?v=[0-9a-f]{10}", html)
+    r = app.test_client().get(f"/static/app.css?v={huella}")
+    assert r.status_code == 200 and "max-age=86400" in r.headers["Cache-Control"]
