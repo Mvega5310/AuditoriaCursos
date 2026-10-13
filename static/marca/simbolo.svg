@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 140 960 960" role="img" aria-label="Vencimientos">
+  <defs>
+    <linearGradient id="vc-aro" x1="250" y1="200" x2="1050" y2="1050" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0A9BFF"/><stop offset=".45" stop-color="#1F5BF0"/><stop offset="1" stop-color="#6A16E8"/>
+    </linearGradient>
+    <linearGradient id="vc-izq" x1="400" y1="470" x2="680" y2="860" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0AA2FF"/><stop offset=".6" stop-color="#1450F2"/><stop offset="1" stop-color="#3A16EE"/>
+    </linearGradient>
+    <linearGradient id="vc-der" x1="880" y1="420" x2="640" y2="780" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7C5CFF"/><stop offset=".55" stop-color="#4422E6"/><stop offset="1" stop-color="#2219B8"/>
+    </linearGradient>
+    <linearGradient id="vc-punto" x1="910" y1="280" x2="1005" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2ED47A"/><stop offset="1" stop-color="#0B8A5B"/>
+    </linearGradient>
+  </defs>
+  <path d="M1004 454 A410 410 0 1 1 845 270" fill="none" stroke="url(#vc-aro)" stroke-width="90" stroke-linecap="round"/>
+  <path d="M845 462 L622 796" fill="none" stroke="url(#vc-der)" stroke-width="150" stroke-linecap="round"/>
+  <path d="M424 498 L622 796" fill="none" stroke="url(#vc-izq)" stroke-width="150" stroke-linecap="round"/>
+  <circle cx="958" cy="337" r="66" fill="url(#vc-punto)"/>
+</svg>

@@ -23,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+from config import APP_URL
 from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
 import calendario
@@ -157,6 +158,7 @@ def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: l
         faltantes=faltantes or [],
         total_faltantes=sum(f["cantidad"] for f in (faltantes or [])),
         resumen=_calcular_resumen(registros),
+        app_url=APP_URL,
     )
 
 

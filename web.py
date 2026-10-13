@@ -10,6 +10,7 @@ Produccion:  gunicorn 'web:create_app()' --workers 1 --threads 4
              (un solo worker: SQLite, el limite de intentos de login y el scheduler viven en el proceso)
 """
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -40,6 +41,9 @@ SECTORES = {"salud": "Salud", "alimentos": "Alimentos", "construccion": "Constru
 RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 10
 INTENTOS_MAX, VENTANA_SEG = 5, 15 * 60
+
+
+mimetypes.add_type("application/manifest+json", ".webmanifest")   # icono al "agregar a la pantalla de inicio"
 
 
 def create_app(overrides: dict | None = None) -> Flask:
@@ -114,7 +118,8 @@ def create_app(overrides: dict | None = None) -> Flask:
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "same-origin"
-        resp.headers["Cache-Control"] = "no-store"
+        # Paginas con datos: nunca en cache. Logo, iconos y CSS: un dia (no tienen datos de nadie).
+        resp.headers["Cache-Control"] = "public, max-age=86400" if request.endpoint == "static" else "no-store"
         return resp
 
     def login_requerido(vista):

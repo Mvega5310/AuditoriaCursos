@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="150 140 960 960" role="img" aria-label="Vencimientos">
+  
+  <path d="M1004 454 A410 410 0 1 1 845 270" fill="none" stroke="#FFFFFF" stroke-width="90" stroke-linecap="round"/>
+  <path opacity=".82" d="M845 462 L622 796" fill="none" stroke="#FFFFFF" stroke-width="150" stroke-linecap="round"/>
+  <path d="M424 498 L622 796" fill="none" stroke="#FFFFFF" stroke-width="150" stroke-linecap="round"/>
+  <circle cx="958" cy="337" r="66" fill="#FFFFFF"/>
+</svg>

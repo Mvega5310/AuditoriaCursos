@@ -10,7 +10,10 @@
     .wrapper { max-width: 1000px; margin: 24px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.12); }
 
     /* Encabezado */
-    .header { background: #1a5276; color: #ffffff; padding: 28px 32px; }
+    .header { background: #2563EB; background-image: linear-gradient(135deg, #1687FF, #4F46E5); color: #ffffff; padding: 24px 32px 28px; }
+    .marca { margin-bottom: 14px; }
+    .marca img { vertical-align: middle; border-radius: 12px; }
+    .marca span { font-size: 16px; font-weight: bold; vertical-align: middle; margin-left: 10px; letter-spacing: 0.2px; }
     .header .empresa { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.85; margin-bottom: 6px; }
     .header h1 { font-size: 20px; font-weight: bold; margin-bottom: 6px; }
     .header .meta { font-size: 12px; opacity: 0.8; }
@@ -71,6 +74,7 @@
 
   <!-- Encabezado -->
   <div class="header">
+    <div class="marca"><img src="{{ app_url }}/static/marca/icono-correo.png" width="40" height="40" alt="Vencimientos"><span>Vencimientos</span></div>
     <div class="empresa">{{ empresa }}</div>
     <h1>{{ tipo_alerta }}</h1>
     <div class="meta">

@@ -231,3 +231,17 @@ Las demás alertas siguen la misma regla: la **diaria** no se envía en festivos
 La conexión con Google Sheets está desactivada. Mientras `SHEETS_ENABLED` no valga `1`: no aparece la conexión en la app, las acciones de
 conectar/sincronizar responden 404 y el programador no sincroniza a las 6:30. La opción **«Cursos controlados»**, que también usa el Excel,
 sigue disponible en el menú. Para activarlo: definir `SHEETS_ENABLED=1` y `GOOGLE_SERVICE_ACCOUNT_JSON` (ver la sección anterior).
+
+## Marca
+
+Los archivos del logo están en `static/marca/`:
+
+| Archivo | Uso |
+|---|---|
+| `simbolo.svg` | Logo a color (barra superior, login, registro). Es el archivo maestro. |
+| `simbolo-blanco.svg` | Versión en blanco para fondos azules o fotos. |
+| `favicon.svg`, `favicon-16.png`, `favicon-32.png` | Ícono de la pestaña del navegador (trazos más gruesos para que se lea pequeño). |
+| `apple-touch-icon.png`, `icono-192.png`, `icono-512.png`, `manifest.webmanifest` | Ícono al "agregar a la pantalla de inicio" del celular. |
+| `icono-correo.png` | Logo del encabezado de los correos de aviso (los correos no muestran SVG). Se carga desde `APP_URL`. |
+
+Colores: degradado `#1687FF` → `#4F46E5`, acento verde `#16803C`. Fuente: Inter.
