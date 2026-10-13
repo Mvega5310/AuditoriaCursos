@@ -265,3 +265,13 @@ def test_titulo_de_pestana_y_paginas_de_error(app):
     assert "Ingresar · Vencimientos".encode() in c.get("/login").data
     r = c.get("/ruta-que-no-existe")                       # las paginas de error no definen titulo: no deben fallar
     assert r.status_code == 404 and b"<title>Vencimientos</title>" in r.data
+
+
+def test_head_muestra_la_pagina_y_no_cuenta_como_intento_de_login(app):
+    c = app.test_client()
+    for _ in range(6):                                   # mas que el limite de intentos
+        assert c.head("/login").status_code == 200
+    assert c.head("/registro").status_code == 200
+    assert not any(app.config["INTENTOS"].values())      # ningun intento fallido registrado
+    a, _ = registrar(app, "Clinica A", "a@a.com")
+    assert a.head("/importar").status_code == 200

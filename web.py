@@ -150,7 +150,7 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     @app.route("/registro", methods=["GET", "POST"])
     def registro():
-        if request.method == "GET":
+        if request.method != "POST":       # GET y HEAD muestran el formulario
             return render_template("registro.html", sectores=SECTORES, form={})
         f = {k: request.form.get(k, "").strip() for k in ("empresa", "nit", "sector", "email")}
         clave = request.form.get("password", "")
@@ -211,7 +211,7 @@ def create_app(overrides: dict | None = None) -> Flask:
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
-        if request.method == "GET":
+        if request.method != "POST":
             return render_template("login.html")
         email = request.form.get("email", "").strip().lower()
         clave_rl = f"{request.remote_addr}|{email}"
@@ -390,7 +390,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.route("/importar", methods=["GET", "POST"])
     @login_requerido
     def importar_vista():
-        if request.method == "GET":
+        if request.method != "POST":
             return render_template("importar.html", stats=None)
         archivo = request.files.get("archivo")
         if not archivo or not archivo.filename.lower().endswith(".xlsx"):
