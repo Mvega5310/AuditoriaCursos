@@ -242,6 +242,10 @@ Los archivos del logo están en `static/marca/`:
 | `simbolo-blanco.svg` | Versión en blanco para fondos azules o fotos. |
 | `favicon.svg`, `favicon-16.png`, `favicon-32.png` | Ícono de la pestaña del navegador (trazos más gruesos para que se lea pequeño). |
 | `apple-touch-icon.png`, `icono-192.png`, `icono-512.png`, `manifest.webmanifest` | Ícono al "agregar a la pantalla de inicio" del celular. |
-| `icono-correo.png` | Logo del encabezado de los correos de aviso (los correos no muestran SVG). Se carga desde `APP_URL`. |
+| `logo-vertical.svg` / `.png` | Logo completo (símbolo, sobre y nombre) apilado: login, registro, propuestas y redes. |
+| `logo-horizontal.svg` | Logo completo en una línea, para encabezados anchos. |
+| `simbolo-sobre.svg` | Símbolo con el sobre, sin texto (página Alertas). |
+| `logo-correo.png` | Logo del encabezado de los correos de aviso (los correos no muestran SVG). Se carga desde `APP_URL`. |
+| `compartir.png` | Imagen de 1200×630 que aparece al compartir el enlace en WhatsApp, LinkedIn o correo. |
 
-Colores: degradado `#1687FF` → `#4F46E5`, acento verde `#16803C`. Fuente: Inter.
+Colores: degradado `#1687FF` → `#4F46E5`, acento verde `#16803C`, texto `#0B1437`. Fuente del nombre: Nunito Black (convertida a trazos dentro del SVG, no hay que instalarla). Fuente de la app: Inter.

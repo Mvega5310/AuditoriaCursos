@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% block titulo %}Registro de empresa{% endblock %}
 {% block cuerpo %}<div class="card">
-<div class="marca-auth"><img src="{{ url_for('static', filename='marca/simbolo.svg') }}" alt="" width="76" height="76"><b>Vencimientos</b><small>Documentos al día, sin sorpresas</small></div>
+<div class="marca-auth"><img src="{{ url_for('static', filename='marca/logo-vertical.svg') }}" alt="Vencimientos" width="230"><small>Documentos al día, sin sorpresas</small></div>
 <h1>Registre su empresa</h1>
 <p class="mut">Controle los vencimientos de cursos, licencias, exámenes y documentos. Cada empresa ve solo su información.</p>
 <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">

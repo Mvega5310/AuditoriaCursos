@@ -111,7 +111,8 @@ def create_app(overrides: dict | None = None) -> Flask:
     def _plantillas():
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
-        return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"]}
+        return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"],
+                "app_url": config.APP_URL}
 
     @app.after_request
     def _cabeceras(resp):

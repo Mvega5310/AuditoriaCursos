@@ -35,7 +35,8 @@
   {% if historial %}<table><tr><th>Fecha</th><th>Tipo</th><th>Documentos</th><th>Enviado a</th><th>Estado</th></tr>
   {% for h in historial %}<tr><td>{{ h.fecha_envio }}</td><td>{{ h.tipo_alerta }}</td><td>{{ h.documentos_notificados }}</td><td>{{ h.destinatario or '—' }}</td>
     <td class="{{ '' if h.estado == 'enviado' else 'alerta' }}">{{ {'enviado':'Enviado','error_envio':'Falló el envío','sin_registros':'Sin novedades (no se envió)','sin_destinatario':'Sin destinatarios'}.get(h.estado, h.estado) }}</td></tr>{% endfor %}</table>
-  {% else %}<p class="mut">Aún no se ha enviado ninguna alerta. Horarios: diaria lun-vie 7:00 · semanal lunes 7:30 · quincenal días 1 y 15 a las 8:00 · mensual día 1 a las 8:30 (hora de Colombia).</p>{% endif %}
+  {% else %}<div style="text-align:center;padding:12px 0"><img src="{{ url_for('static', filename='marca/simbolo-sobre.svg') }}" alt="" width="96" style="opacity:.9"></div>
+  <p class="mut" style="text-align:center">Aún no se ha enviado ninguna alerta. Horarios: diaria lun-vie 7:00 · semanal lunes 7:30 · quincenal días 1 y 15 a las 8:00 · mensual día 1 a las 8:30 (hora de Colombia).</p>{% endif %}
 </div>
 
 {% endblock %}

@@ -33,7 +33,7 @@ h1{font-size:2rem;line-height:1.2;margin:0 0 8px;font-weight:700}h2{font-size:1.
 .marca{display:flex;align-items:center;gap:12px;color:var(--tx);text-decoration:none!important}
 .logo{width:44px;height:44px;flex:none;display:block;filter:drop-shadow(0 6px 14px rgba(37,99,235,.22))}
 .marca-auth{display:flex;flex-direction:column;align-items:center;gap:6px;margin:0 0 18px;text-align:center}
-.marca-auth img{width:76px;height:76px;filter:drop-shadow(0 10px 24px rgba(37,99,235,.25))}
+.marca-auth img{width:230px;max-width:80%;height:auto}
 .marca-auth b{font-size:1.5rem;line-height:1.1}.marca-auth small{color:var(--mut)}
 .marca b{display:block;font-size:1.15rem;line-height:1.1}.marca small{display:block;color:var(--mut);font-size:.75rem}
 .top .esp{margin-left:auto}
