@@ -145,8 +145,7 @@ BEGIN
     VALUES (OLD.id, OLD.fecha_emision, OLD.fecha_vencimiento, OLD.archivo, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'));
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
-DROP TRIGGER IF EXISTS trg_documentos_historial ON documentos;
-CREATE TRIGGER trg_documentos_historial BEFORE UPDATE OF fecha_vencimiento ON documentos
+CREATE OR REPLACE TRIGGER trg_documentos_historial BEFORE UPDATE OF fecha_vencimiento ON documentos
     FOR EACH ROW WHEN (OLD.fecha_vencimiento IS DISTINCT FROM NEW.fecha_vencimiento)
     EXECUTE FUNCTION fn_documentos_historial();
 """
@@ -159,8 +158,16 @@ def _esquema_pg(sqlite_sql: str) -> str:
     return sql + _TRIGGER_PG
 
 
+# Bases Postgres ya inicializadas en este proceso. El esquema (DDL) toma bloqueos sobre las tablas: hacerlo en cada
+# importacion haria esperar a la importacion detras de cualquier transaccion abierta (p. ej. el envio de alertas).
+_ESQUEMA_LISTO: set = set()
+
+
 def inicializar_db(conn) -> None:
-    """Crea las tablas si no existen y carga el catalogo inicial (sin pisar lo existente)."""
+    """Crea las tablas si no existen y carga el catalogo inicial (sin pisar lo existente).
+    En Postgres se hace una sola vez por proceso; en SQLite (un archivo por base) en cada llamada."""
+    if es_postgres(conn) and DATABASE_URL in _ESQUEMA_LISTO:
+        return
     esquema = SCHEMA_PATH.read_text(encoding="utf-8")
     if es_postgres(conn):
         esquema = _esquema_pg(esquema)
@@ -178,6 +185,8 @@ def inicializar_db(conn) -> None:
         [(c[0], c[1], c[2]) for c in CATALOGO if c[0] != "general"],
     )
     conn.commit()
+    if es_postgres(conn):
+        _ESQUEMA_LISTO.add(DATABASE_URL)
 
 
 def _asegurar_columnas(conn) -> None:

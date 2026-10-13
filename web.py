@@ -545,6 +545,28 @@ def create_app(overrides: dict | None = None) -> Flask:
                                habilitado=app.config["SHEETS_ENABLED"],
                                cuenta=sheets.email_cuenta_servicio())
 
+    @app.post("/datos/vaciar")
+    @login_requerido
+    def vaciar_datos():
+        """Borra empleados y documentos (con su historial) de la empresa del usuario, para volver a cargar desde cero.
+        Conserva la cuenta, responsables, avisos, requisitos por cargo y cursos controlados."""
+        if g.usuario["rol"] != "admin":
+            abort(403)
+        if normalizar(request.form.get("confirmacion", "")) != normalizar(g.usuario["empresa"]):
+            flash("Para vaciar los datos escriba exactamente el nombre de su empresa.", "error")
+            return redirect(url_for("importar_vista", _anchor="vaciar"))
+        eid, conn = g.usuario["empresa_id"], db()
+        n_doc = conn.execute("SELECT COUNT(*) FROM documentos WHERE empresa_id = ?", (eid,)).fetchone()[0]
+        n_emp = conn.execute("SELECT COUNT(*) FROM empleados WHERE empresa_id = ?", (eid,)).fetchone()[0]
+        conn.execute("DELETE FROM documentos_historial WHERE documento_id IN "
+                     "(SELECT id FROM documentos WHERE empresa_id = ?)", (eid,))
+        conn.execute("DELETE FROM documentos WHERE empresa_id = ?", (eid,))
+        conn.execute("DELETE FROM empleados WHERE empresa_id = ?", (eid,))
+        conn.commit()
+        log.warning("Datos vaciados: empresa %s, usuario %s (%s documentos, %s empleados)", eid, g.usuario["id"], n_doc, n_emp)
+        flash(f"Listo: se borraron {n_doc} documentos y {n_emp} empleados. Ya puede cargar su archivo desde cero.", "ok")
+        return redirect(url_for("importar_vista"))
+
     @app.route("/responsables", methods=["GET", "POST"])
     @login_requerido
     def responsables():

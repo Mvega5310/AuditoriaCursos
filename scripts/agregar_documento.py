@@ -70,6 +70,7 @@ def agregar(campos: dict, db_path: Path | str = DB_PATH, empresa_defecto: str = 
         if not stats["errores"]:
             df = pd.DataFrame([campos], dtype=object)
             _importar_documentos(cur, df, empresa_defecto, stats)
+            stats["errores"].extend(stats.pop("fechas_dudosas", []))
         if stats["errores"]:
             conn.rollback()        # no dejar tipos/empresas a medias si el documento no se pudo registrar
         else:

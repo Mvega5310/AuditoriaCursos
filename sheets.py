@@ -182,7 +182,7 @@ def sincronizar_empresa(db_path, empresa_id: int, lector=None) -> dict:
                          exigir_cursos=bool(e["exigir_cursos"]))
         estado = (f"ok: {stats['nuevos']} nuevos, {stats['actualizados']} actualizados"
                   + (f", {len(stats['errores'])} filas con error" if stats["errores"] else ""))
-        detalle = "\n".join(stats["errores"][:30])
+        detalle = "\n".join((stats.get("fechas_dudosas", []) + stats["errores"])[:30])
         if len(stats["errores"]) > 30:
             detalle += f"\n… y {len(stats['errores']) - 30} más."
     except SheetsError as exc:

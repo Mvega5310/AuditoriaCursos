@@ -277,3 +277,80 @@ def test_importar_requisitos_del_archivo_plegados(app):
     h = c.get("/importar").data.decode()
     assert '<details class="card desplegable" id="requisitos-archivo">' in h        # sin "open": plegada
     assert "¿Qué necesita su archivo?" in h and "Columnas obligatorias" in h       # el contenido sigue en la pagina
+
+
+# ------------------------------------------------------------ fechas dudosas (vencimientos demasiado viejos)
+
+def test_vencimiento_de_hace_mas_de_5_anios_no_se_importa_y_se_reporta(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    filas = [["201", "Yari", "Pedroza", "Terapista", "UCI", "UCI", _f(-365 * 6)],     # hace 6 anos: dudosa
+             ["202", "Leo", "Rios", "Terapista", "UCI", "UCI", _f(-365 * 4)],      # hace 4 anos: se importa (vencido)
+             ["203", "Ana", "Mesa", "Terapista", "UCI", "BLS", _f(30)]]
+    r = c.post("/importar", data={"csrf": _csrf(c, "/importar"), "archivo": (_excel(filas), "d.xlsx"),
+                                  "accion": "guardar"}, content_type="multipart/form-data")
+    html = r.data.decode()
+    assert "Fechas dudosas — no se importaron (1)" in html
+    assert "Yari Pedroza (201)" in html and "Error de digitación" in html
+    panel = c.get("/panel?ventana=vencidos").data.decode()
+    assert "Rios" in panel and "Pedroza" not in panel
+
+
+def test_fecha_dudosa_en_matriz_con_vigencia(tmp_path):
+    import importar_excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Cedula", "Nombre", "UCI | 730"])
+    ws.append(["301", "Yari Pedroza", (H - timedelta(days=365 * 9)).strftime("%d/%m/%Y")])   # vence hace ~7 anos
+    ws.append(["302", "Leo Rios", (H - timedelta(days=100)).strftime("%d/%m/%Y")])
+    ruta = tmp_path / "m.xlsx"
+    wb.save(ruta)
+    s = importar_excel.importar(ruta, db_path=tmp_path / "t.db", verbose=False)
+    assert s["nuevos"] == 1 and len(s["fechas_dudosas"]) == 1 and "Yari Pedroza" in s["fechas_dudosas"][0]
+
+
+# ------------------------------------------------------------ vaciar los datos de la empresa
+
+def _vaciar(c, confirmacion):
+    return c.post("/datos/vaciar", data={"csrf": _csrf(c, "/importar"), "confirmacion": confirmacion},
+                  follow_redirects=True)
+
+
+def test_vaciar_datos_exige_confirmacion_y_solo_toca_la_propia_empresa(app):
+    a, _ = registrar(app, "Hospital Z", "z@z.com")
+    b, _ = registrar(app, "Clinica Y", "y@y.com")
+    subir(a, _excel(FILAS))
+    subir(b, _excel(FILAS))
+    a.post("/avisos", data={"csrf": _csrf(a, "/avisos"), "anticipacion": "12", "alertas": ["semanal"]})
+    conn = core.conectar(app.config["DB_PATH"])
+    cuenta = lambda t, e: conn.execute(f"SELECT COUNT(*) FROM {t} t JOIN empresas e ON e.id = t.empresa_id "
+                                       "WHERE e.nombre = ?", (e,)).fetchone()[0]
+    antes_b = (cuenta("documentos", "Clinica Y"), cuenta("empleados", "Clinica Y"))
+
+    r = _vaciar(a, "otra cosa")
+    assert "escriba exactamente el nombre" in r.data.decode() and cuenta("documentos", "Hospital Z") == 6
+
+    r = _vaciar(a, "  hospital z ")                  # sin distinguir mayusculas ni espacios
+    assert "se borraron 6 documentos y 4 empleados" in r.data.decode()
+    assert cuenta("documentos", "Hospital Z") == 0 and cuenta("empleados", "Hospital Z") == 0
+    assert (cuenta("documentos", "Clinica Y"), cuenta("empleados", "Clinica Y")) == antes_b      # B intacta
+    eid = conn.execute("SELECT id FROM empresas WHERE nombre = 'Hospital Z'").fetchone()["id"]
+    conf = generar_alertas.configuracion_empresa(conn, eid)
+    assert conf["anticipacion"] == 12 and conf["activas"] == {"semanal"}                          # se conserva
+    assert conn.execute("SELECT COUNT(*) FROM responsables WHERE empresa_id = ?", (eid,)).fetchone()[0] >= 1
+    subir(a, _excel(FILAS))                                                                         # se puede recargar
+    assert cuenta("documentos", "Hospital Z") == 6
+    conn.close()
+
+
+def test_vaciar_datos_solo_admin_y_con_sesion(app):
+    a, _ = registrar(app, "Hospital Z", "z@z.com")
+    subir(a, _excel(FILAS))
+    conn = core.conectar(app.config["DB_PATH"])
+    conn.execute("UPDATE usuarios SET rol = 'usuario'")
+    conn.commit()
+    assert "Vaciar datos y empezar de cero" not in a.get("/importar").data.decode()
+    r = a.post("/datos/vaciar", data={"csrf": _csrf(a, "/importar"), "confirmacion": "Hospital Z"})
+    assert r.status_code == 403
+    assert conn.execute("SELECT COUNT(*) FROM documentos").fetchone()[0] == 6
+    assert app.test_client().post("/datos/vaciar", data={}).status_code in (302, 400)            # sin sesion / sin csrf
+    conn.close()

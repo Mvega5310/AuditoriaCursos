@@ -146,3 +146,8 @@ details.desplegable>.cuerpo{margin-top:20px}
 .paginador a{border:1px solid var(--bd);background:#fff;color:var(--tx);text-decoration:none!important;transition:.2s}
 .paginador a:hover{border-color:var(--pri);color:var(--pri);background:#EFF6FF}
 .paginador .actual{background:var(--grad-act);color:#fff}
+
+/* ---- acciones destructivas ---- */
+.zona-peligro .icono-seccion{background:#FFF1F0;color:var(--err)}
+button.peligro{background:var(--err);box-shadow:0 8px 20px rgba(180,35,24,.25)}
+button.peligro:hover{background:#912018}

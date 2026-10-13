@@ -53,7 +53,7 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from config import DB_PATH, DEFAULT_EMPRESA
+from config import DB_PATH, DEFAULT_EMPRESA, VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS
 from core import (conectar, inicializar_db, es_v1, parsear_fecha, normalizar,
                   resolver_categoria, hoy)
 
@@ -229,6 +229,10 @@ def _importar_requisitos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
             stats["errores"].append(f"Hoja 'Requisitos' fila {idx + 2}: {e} — omitida")
 
 
+class FechaDudosa(ValueError):
+    """Vencimiento tan antiguo que probablemente es un error de digitacion (p. ej. 1998 en lugar de 2026)."""
+
+
 def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict) -> None:
     df = _renombrar(df, ALIAS_DOCUMENTOS)
     if "documento" not in df.columns:
@@ -293,6 +297,10 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
                     vencimiento = (date.fromisoformat(emision) + timedelta(days=periodicidad)).isoformat()
                 if emision and vencimiento and vencimiento < emision:
                     raise ValueError("la fecha de vencimiento es anterior a la de emision")
+                limite = hoy() - timedelta(days=365 * VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS)
+                if vencimiento and vencimiento < limite.isoformat():
+                    raise FechaDudosa(f"vence el {date.fromisoformat(vencimiento).strftime('%d/%m/%Y')}, hace mas de "
+                                      f"{VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS} anos")
                 if not vencimiento:
                     stats["sin_vencimiento"] += 1   # se guarda, pero no generara alertas
 
@@ -334,6 +342,11 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (empresa_id, empleado_id, tipo_id, referencia) + valores)
                 stats["nuevos"] += 0 if no_aplica else 1
+        except FechaDudosa as e:
+            persona = " ".join(x for x in (_txt(row.get("nombre")), _txt(row.get("apellido"))) if x)
+            quien = f"{persona} ({_txt(row.get('cedula'))})" if persona else "Empresa"
+            stats.setdefault("fechas_dudosas", []).append(
+                f"Fila {fila} — {quien} — {nombre_doc}: {e}. ¿Error de digitación? No se importó.")
         except Exception as e:
             etiqueta = f"Fila {fila}" + (f" ({nombre_doc})" if nombre_doc else "")
             stats["errores"].append(f"{etiqueta}: {e} — omitida")
@@ -686,7 +699,8 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
 
     stats = {"empresas": set(), "responsables": 0, "nuevos": 0, "actualizados": 0,
              "sin_vencimiento": 0, "requisitos": 0, "personas_matriz": 0, "no_aplica": 0, "retirados": 0,
-             "sin_fecha_final": {}, "columnas_ignoradas": [], "columnas_no_controladas": [], "hojas_ignoradas": [], "errores": []}
+             "sin_fecha_final": {}, "columnas_ignoradas": [], "columnas_no_controladas": [], "hojas_ignoradas": [], "errores": [],
+             "fechas_dudosas": []}
     if verbose:
         print(f"Leyendo: {ruta.name if ruta else 'hojas en memoria'}")
     for df in empresas:
@@ -735,6 +749,10 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
         for emp, r in stats["resumen"].items():
             print(f"  Estado de {emp}: {r['vencidos']} vencidos | vencen en 7 dias: {r['d7']} | "
                   f"en 15: {r['d15']} | en 30: {r['d30']}")
+        if stats["fechas_dudosas"]:
+            print(f"  Fechas dudosas (no importadas): {len(stats['fechas_dudosas'])}")
+            for x in stats["fechas_dudosas"]:
+                print(f"    - {x}")
         print(f"  Filas con error:        {len(stats['errores'])}")
         for e in stats["errores"]:
             print(f"    - {e}")

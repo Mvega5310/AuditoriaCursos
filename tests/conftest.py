@@ -30,5 +30,6 @@ def _motor_de_base_de_datos(request, monkeypatch):
     with psycopg.connect(url, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE")
         c.execute("CREATE SCHEMA public")
+    core._ESQUEMA_LISTO.clear()                 # el esquema se acaba de borrar: hay que volver a crearlo
     monkeypatch.setattr(core, "DATABASE_URL", url)
     yield

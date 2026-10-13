@@ -74,6 +74,9 @@ ALERTAS = {
 }
 
 
+# Un vencimiento de hace mas de estos anos se considera un error de digitacion y no se importa
+VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS = 5
+
 # Dia de la semana en que cada empresa recibe el aviso semanal (indice = date.weekday())
 DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes"]
 
