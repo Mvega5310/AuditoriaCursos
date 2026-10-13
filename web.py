@@ -279,15 +279,38 @@ def create_app(overrides: dict | None = None) -> Flask:
                     ubicaciones=ubicaciones, f=filtros, maximo=maximo, str_max=str(maximo), opciones_ventana=opciones,
                     total_empresa=len(todos))
 
+    POR_PAGINA = 20
+
+    def _paginar(items: list, clave: str) -> tuple[list, dict]:
+        """Corta `items` en paginas de POR_PAGINA segun el parametro `clave` de la URL (valores raros -> pagina valida)."""
+        total = len(items)
+        paginas = max(1, -(-total // POR_PAGINA))
+        valor = request.args.get(clave, "1")
+        pagina = min(max(int(valor), 1), paginas) if valor.isdigit() else 1
+        ini = (pagina - 1) * POR_PAGINA
+        visibles = sorted({1, paginas, pagina - 1, pagina, pagina + 1} & set(range(1, paginas + 1)))
+        numeros = []
+        for n in visibles:                                  # 1 … 4 5 6 … 12
+            if numeros and n - numeros[-1] > 1:
+                numeros.append(None)
+            numeros.append(n)
+        return items[ini:ini + POR_PAGINA], {"pagina": pagina, "paginas": paginas, "total": total,
+                                             "desde": ini + 1 if total else 0, "hasta": min(ini + POR_PAGINA, total),
+                                             "numeros": numeros}
+
     @app.get("/panel")
     @login_requerido
     def panel():
         datos = _vencimientos_filtrados()
-        registros = datos.pop("registros")
+        registros, pag_v = _paginar(datos.pop("registros"), "pagina")
+        faltantes, pag_f = _paginar(datos.pop("faltantes"), "pf")
         empleados = db().execute("SELECT COUNT(*) FROM empleados WHERE empresa_id = ? AND activo = 1",
                                  (g.usuario["empresa_id"],)).fetchone()[0]
-        return render_template("panel.html", registros=registros[:300], total=len(registros), empleados=empleados,
-                               hoy=hoy().strftime("%d/%m/%Y"), **datos)
+        return render_template("panel.html", registros=registros, pag_v=pag_v, faltantes=faltantes, pag_f=pag_f,
+                               # la lista de faltantes empieza plegada; se abre si el usuario esta paginandola
+                               abrir_faltantes="pf" in request.args,
+                               pf_actual=pag_f["pagina"] if "pf" in request.args else None,
+                               empleados=empleados, hoy=hoy().strftime("%d/%m/%Y"), **datos)
 
     @app.get("/panel.xlsx")
     @login_requerido

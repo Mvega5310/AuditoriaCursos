@@ -125,3 +125,24 @@ textarea{width:100%;min-height:110px;padding:12px 14px;border:1px solid #D7E2EF;
 textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 4px rgba(37,99,235,.14);background:#fff}
 a.kpi{color:inherit;text-decoration:none;transition:transform .25s,border-color .25s}a.kpi:hover{border-color:var(--pri);transform:translateY(-2px);text-decoration:none}a.kpi.sel{border-color:var(--pri);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
 .filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;align-items:end}.filtros label{margin-top:0}.filtros button{margin-top:0}
+
+/* ---- secciones desplegables (details/summary) ---- */
+details.desplegable>summary{list-style:none;display:flex;align-items:center;gap:14px;cursor:pointer;user-select:none}
+details.desplegable>summary::-webkit-details-marker{display:none}
+details.desplegable>summary h2{margin:0;font-size:1.15rem}
+details.desplegable>summary .chev{margin-left:auto;color:var(--mut);transition:transform .25s}
+details.desplegable[open]>summary .chev{transform:rotate(180deg)}
+details.desplegable>summary .pista{margin-left:auto;font-size:.88rem;font-weight:600;color:var(--pri)}
+details.desplegable>summary .pista+.chev{margin-left:0}
+details.desplegable .ocultar,details.desplegable[open] .ver{display:none}
+details.desplegable[open] .ocultar{display:inline}
+details.desplegable>summary:hover h2{color:var(--pri)}
+details.desplegable>.cuerpo{margin-top:20px}
+
+/* ---- paginador ---- */
+.paginador{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.paginador .paginas{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.paginador a,.paginador .actual{min-width:38px;height:38px;padding:0 12px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;font-weight:600;font-size:.92rem}
+.paginador a{border:1px solid var(--bd);background:#fff;color:var(--tx);text-decoration:none!important;transition:.2s}
+.paginador a:hover{border-color:var(--pri);color:var(--pri);background:#EFF6FF}
+.paginador .actual{background:var(--grad-act);color:#fff}

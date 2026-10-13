@@ -216,3 +216,64 @@ def test_motor_aplica_el_calendario_a_diaria_quincenal_y_mensual(app, tmp_path, 
     # una ejecucion manual (sin respetar_dia) no consulta el calendario
     generar_alertas.ejecutar_alerta("mensual", dry_run=True, db_path=app.config["DB_PATH"])
     assert (salidas / "alerta_mensual_hospital_z.html").exists()
+
+
+# ------------------------------------------------------------ panel: secciones desplegables y paginacion de 20
+
+def _excel_45():
+    """45 personas con un BLS que vence en 10 dias, y el requisito ARL para todos (45 faltantes)."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Documentos"
+    ws.append(["Cedula", "Nombre", "Apellido", "Cargo", "Area", "Documento", "Fecha Vencimiento"])
+    for i in range(1, 46):
+        ws.append([str(1000 + i), f"Persona{i:02d}", "Prueba", "Auxiliar", "UCI" if i % 2 else "Urgencias", "BLS", _f(10)])
+    req = wb.create_sheet("Requisitos")
+    req.append(["Cargo", "Documento"])
+    req.append(["*", "Afiliación ARL"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _filas(html, seccion):
+    """Cantidad de filas de datos dentro de la seccion desplegable `seccion`."""
+    parte = html.split(f'id="{seccion}"', 1)[1].split("</details>", 1)[0]
+    return parte.count("<tr><td>")
+
+
+def test_panel_pagina_de_a_20_cada_lista(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    subir(c, _excel_45())
+    h1 = c.get("/panel").data.decode()
+    assert "45 registros" in h1 and _filas(h1, "vencimientos") == 20 and _filas(h1, "faltantes") == 20
+    assert "Mostrando 1–20 de 45" in h1 and "Siguiente ›" in h1
+    h3 = c.get("/panel?pagina=3").data.decode()
+    assert _filas(h3, "vencimientos") == 5 and "Mostrando 41–45 de 45" in h3 and "Siguiente ›" not in h3.split('id="faltantes"')[0]
+    assert _filas(c.get("/panel?pf=3").data.decode(), "faltantes") == 5
+    for raro in ("0", "-1", "999", "abc"):                       # valores raros: pagina valida, sin error
+        r = c.get(f"/panel?pagina={raro}")
+        assert r.status_code == 200 and _filas(r.data.decode(), "vencimientos") in (20, 5)
+    # el Excel trae la lista completa, no solo la pagina
+    ws = openpyxl.load_workbook(io.BytesIO(c.get("/panel.xlsx?pagina=2").data))["Vencimientos"]
+    assert ws.max_row - 1 == 45
+
+
+def test_panel_paginacion_conserva_filtros_y_secciones(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    subir(c, _excel_45())
+    h = c.get("/panel?ubicacion=UCI&pf=2").data.decode()
+    assert "23 registros" in h                                   # 23 impares en UCI: 2 paginas
+    assert "ubicacion=UCI" in h.split('id="vencimientos"')[1].split("</details>")[0].split("<nav")[1]
+    assert '<details class="card desplegable" id="vencimientos" open>' in h
+    assert '<details class="card desplegable" id="faltantes" open>' in h          # se esta paginando: abierta
+    h2 = c.get("/panel").data.decode()
+    assert '<details class="card desplegable" id="faltantes" >' in h2                # por defecto: plegada
+
+
+def test_importar_requisitos_del_archivo_plegados(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    h = c.get("/importar").data.decode()
+    assert '<details class="card desplegable" id="requisitos-archivo">' in h        # sin "open": plegada
+    assert "¿Qué necesita su archivo?" in h and "Columnas obligatorias" in h       # el contenido sigue en la pagina

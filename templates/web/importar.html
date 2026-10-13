@@ -14,8 +14,10 @@
   </div>
 </section>
 
-<section class="card">
-  <div class="titulo-sec"><span class="icono-seccion">{{ ico("doc", 22) }}</span><h2>¿Qué necesita su archivo?</h2></div>
+<details class="card desplegable" id="requisitos-archivo">
+  <summary><span class="icono-seccion">{{ ico("doc", 22) }}</span><h2>¿Qué necesita su archivo?</h2>
+    <span class="pista mut"><span class="ver">Ver detalles</span><span class="ocultar">Ocultar</span></span>{{ ico("down", 20, "chev") }}</summary>
+  <div class="cuerpo">
   <p class="mut" style="margin-top:0">Una de estas dos formas (el nombre de la hoja no importa; se reconocen por las columnas):</p>
   <div class="tabla"><table>
     <thead><tr><th>Tipo</th><th>Columnas obligatorias</th><th>Ejemplo</th></tr></thead>
@@ -33,7 +35,8 @@
       <li>Celda vacía, «-» o «Pendiente» = sin registrar. «N/A» = el curso no le aplica a esa persona. Fechas: dd/mm/aaaa.</li>
       <li>Si una fila tiene un dato malo, solo esa se omite y se le dice cuál; las demás sí se guardan.</li>
     </ul></div>
-</section>
+  </div>
+</details>
 
 <section class="card">
   <form method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}">

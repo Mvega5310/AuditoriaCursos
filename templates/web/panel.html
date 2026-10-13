@@ -1,6 +1,22 @@
-{% extends "base.html" %}{% block titulo %}Panel{% endblock %}
+{% extends "base.html" %}{% from "_iconos.html" import ico %}{% block titulo %}Panel{% endblock %}
 {% block cuerpo %}<h1>{{ usuario.empresa }}</h1><p class="mut">Estado al {{ hoy }} · {{ empleados }} empleados activos</p>
 {% macro enlace(v) %}{{ url_for('panel', ventana=v, curso=f.curso or None, ubicacion=f.ubicacion or None) }}{% endmacro %}
+{# URL del panel conservando filtros; pagina = lista de vencimientos, pf = lista de faltantes #}
+{% macro url_pag(pagina, pf, ancla) %}{{ url_for('panel', ventana=f.ventana, curso=f.curso or None, ubicacion=f.ubicacion or None, pagina=pagina, pf=pf, _anchor=ancla) }}{% endmacro %}
+{% macro paginador(info, es_faltantes) %}
+{% if info.paginas > 1 %}
+<nav class="paginador" aria-label="Páginas de la lista">
+  <span class="mut">Mostrando {{ info.desde }}–{{ info.hasta }} de {{ info.total }}</span>
+  <span class="paginas">
+  {% for n in [info.pagina - 1] if info.pagina > 1 %}<a href="{{ url_pag(pag_v.pagina, n, 'faltantes') if es_faltantes else url_pag(n, pf_actual, 'vencimientos') }}" aria-label="Página anterior">‹ Anterior</a>{% endfor %}
+  {% for n in info.numeros %}{% if n is none %}<span class="mut">…</span>
+  {% elif n == info.pagina %}<span class="actual" aria-current="page">{{ n }}</span>
+  {% else %}<a href="{{ url_pag(pag_v.pagina, n, 'faltantes') if es_faltantes else url_pag(n, pf_actual, 'vencimientos') }}">{{ n }}</a>{% endif %}{% endfor %}
+  {% for n in [info.pagina + 1] if info.pagina < info.paginas %}<a href="{{ url_pag(pag_v.pagina, n, 'faltantes') if es_faltantes else url_pag(n, pf_actual, 'vencimientos') }}" aria-label="Página siguiente">Siguiente ›</a>{% endfor %}
+  </span>
+</nav>
+{% endif %}
+{% endmacro %}
 <div class="kpis">
 <a class="kpi {{ 'sel' if f.ventana == 'vencidos' }}" href="{{ enlace('vencidos') }}"><b class="vencido">{{ resumen.vencidos }}</b>Vencidos</a>
 <a class="kpi {{ 'sel' if f.ventana == '7' }}" href="{{ enlace(7) }}"><b class="critico">{{ resumen.d7 }}</b>Vencen en 7 días</a>
@@ -20,14 +36,25 @@
   <div><button>Filtrar</button></div>
 </form></div>
 
-<div class="card tabla"><h2>{{ titulo }} — {{ total }} registro{{ '' if total == 1 else 's' }}</h2>
-{% if registros %}<p><a href="{{ url_for('panel_excel', ventana=f.ventana, curso=f.curso or None, ubicacion=f.ubicacion or None) }}">⬇ Descargar esta lista en Excel</a></p>
-<table>
-<tr><th>Titular</th><th>Cédula</th><th>Ubicación / cargo</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>
-{% for r in registros %}<tr><td>{{ r.titular }}</td><td>{{ r.identificacion }}</td><td>{{ r.area_cargo }}</td><td>{{ r.documento }}</td><td>{{ r.fecha_vencimiento }}</td><td class="{{ r.clase }}">{{ r.estado_label }} ({{ r.dias_texto }} d)</td></tr>{% endfor %}
-</table>{% if total > registros|length %}<p class="mut">Mostrando {{ registros|length }} de {{ total }}. Descargue el Excel para verlos todos.</p>{% endif %}
-{% else %}<p class="mut">No hay documentos con este filtro.</p>{% endif %}</div>
+<details class="card desplegable" id="vencimientos" open>
+  <summary><span class="icono-seccion">{{ ico("calendar", 22) }}</span><h2>{{ titulo }} — {{ pag_v.total }} registro{{ '' if pag_v.total == 1 else 's' }}</h2>{{ ico("down", 20, "chev") }}</summary>
+  <div class="cuerpo tabla">
+  {% if registros %}<p><a href="{{ url_for('panel_excel', ventana=f.ventana, curso=f.curso or None, ubicacion=f.ubicacion or None) }}">⬇ Descargar esta lista completa en Excel</a></p>
+  <table>
+  <tr><th>Titular</th><th>Cédula</th><th>Ubicación / cargo</th><th>Documento</th><th>Vence</th><th>Estado</th></tr>
+  {% for r in registros %}<tr><td>{{ r.titular }}</td><td>{{ r.identificacion }}</td><td>{{ r.area_cargo }}</td><td>{{ r.documento }}</td><td>{{ r.fecha_vencimiento }}</td><td class="{{ r.clase }}">{{ r.estado_label }} ({{ r.dias_texto }} d)</td></tr>{% endfor %}
+  </table>
+  {{ paginador(pag_v, false) }}
+  {% else %}<p class="mut">No hay documentos con este filtro.</p>{% endif %}
+  </div>
+</details>
 
-{% if faltantes %}<div class="card tabla"><h2>Documentos exigidos sin registrar ({{ faltantes|length }} personas)</h2><table><tr><th>Persona</th><th>Cédula</th><th>Ubicación / cargo</th><th>Faltan</th></tr>
-{% for x in faltantes %}<tr><td>{{ x.titular }}</td><td>{{ x.identificacion }}</td><td>{{ x.area_cargo }}</td><td>{{ x.faltan }}</td></tr>{% endfor %}</table></div>{% endif %}
+{% if pag_f.total %}<details class="card desplegable" id="faltantes" {{ 'open' if abrir_faltantes }}>
+  <summary><span class="icono-seccion">{{ ico("users", 22) }}</span><h2>Documentos exigidos sin registrar ({{ pag_f.total }} persona{{ '' if pag_f.total == 1 else 's' }})</h2>{{ ico("down", 20, "chev") }}</summary>
+  <div class="cuerpo tabla">
+  <table><tr><th>Persona</th><th>Cédula</th><th>Ubicación / cargo</th><th>Faltan</th></tr>
+  {% for x in faltantes %}<tr><td>{{ x.titular }}</td><td>{{ x.identificacion }}</td><td>{{ x.area_cargo }}</td><td>{{ x.faltan }}</td></tr>{% endfor %}</table>
+  {{ paginador(pag_f, true) }}
+  </div>
+</details>{% endif %}
 {% endblock %}
