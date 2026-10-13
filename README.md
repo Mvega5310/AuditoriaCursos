@@ -225,3 +225,9 @@ de lunes a viernes a las 07:30 (hora de Colombia) y lo envía a cada empresa el 
 
 Las demás alertas siguen la misma regla: la **diaria** no se envía en festivos ni fines de semana, y la **quincenal** (días 1 y 15) y la
 **mensual** (día 1) se corren al siguiente día hábil cuando esa fecha cae en fin de semana o festivo.
+
+## Google Sheets: apagado por defecto
+
+La conexión con Google Sheets está desactivada. Mientras `SHEETS_ENABLED` no valga `1`: no aparece la conexión en la app, las acciones de
+conectar/sincronizar responden 404 y el programador no sincroniza a las 6:30. La opción **«Cursos controlados»**, que también usa el Excel,
+sigue disponible en el menú. Para activarlo: definir `SHEETS_ENABLED=1` y `GOOGLE_SERVICE_ACCOUNT_JSON` (ver la sección anterior).

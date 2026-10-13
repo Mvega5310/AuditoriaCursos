@@ -1,5 +1,6 @@
-{% extends "base.html" %}{% block titulo %}Google Sheets{% endblock %}
+{% extends "base.html" %}{% block titulo %}{{ 'Google Sheets' if habilitado else 'Cursos controlados' }}{% endblock %}
 {% block cuerpo %}
+{% if habilitado %}
 <div class="card">
   <h1>Conectar con Google Sheets</h1>
   <p>Mantenga su lista en una hoja de Google: <b>cada día a las 6:30 a. m.</b> el sistema lee los cambios y actualiza los vencimientos <b>antes</b> de enviar las alertas de las 7:00. Use las mismas columnas que en el Excel (<a href="{{ url_for('plantilla_descarga') }}">descargar plantilla</a>).</p>
@@ -25,9 +26,11 @@
   {% endif %}
 </div>
 
+{% endif %}
+
 <div class="card">
-  <h2>Qué cursos controlar</h2>
-  <p class="mut">Sirve para el Excel y para Google Sheets. Si su matriz trae muchas columnas con fechas (vacunas, cursos que se hacen una sola vez…), escriba aquí solo los cursos que quiere vigilar, uno por línea. Las demás columnas se ignoran. Déjelo vacío para controlar todas las que tengan fechas.</p>
+  {% if habilitado %}<h2>Qué cursos controlar</h2>{% else %}<h1>Cursos controlados</h1>{% endif %}
+  <p class="mut">Sirve para el Excel{% if habilitado %} y para Google Sheets{% endif %}. Si su matriz trae muchas columnas con fechas (vacunas, cursos que se hacen una sola vez…), escriba aquí solo los cursos que quiere vigilar, uno por línea. Las demás columnas se ignoran. Déjelo vacío para controlar todas las que tengan fechas.</p>
   <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="accion" value="opciones">
     <label for="cursos">Cursos controlados (uno por línea)</label>
     <textarea id="cursos" name="cursos" rows="7" placeholder="BLS&#10;ACLS&#10;Gestión del duelo">{{ e.cursos_controlados or '' }}</textarea>
@@ -36,7 +39,7 @@
   </form>
 </div>
 
-{% if e.sheet_url %}
+{% if habilitado and e.sheet_url %}
 <div class="card">
   <h2>Estado</h2>
   {% if e.sheet_sync_en %}

@@ -158,7 +158,7 @@ def test_sincronizar_todas_una_falla_no_detiene_a_las_otras(tmp_path):
 # ------------------------------------------------------------------ web
 @pytest.fixture
 def app(tmp_path):
-    return web.create_app({"TESTING": True, "DB_PATH": tmp_path / "t.db", "SECRET_KEY": "x" * 32})
+    return web.create_app({"TESTING": True, "DB_PATH": tmp_path / "t.db", "SECRET_KEY": "x" * 32, "SHEETS_ENABLED": True})
 
 
 def _post(c, **datos):
@@ -205,3 +205,43 @@ def test_web_guardar_sincroniza_y_aisla_empresas(app, cuenta, monkeypatch):
 
 def test_web_sheets_exige_login(app):
     assert app.test_client().get("/sheets").status_code == 302
+
+
+# ------------------------------------------------------------------ Google Sheets apagado (estado por defecto)
+@pytest.fixture
+def app_sin_sheets(tmp_path):
+    return web.create_app({"TESTING": True, "DB_PATH": tmp_path / "t.db", "SECRET_KEY": "x" * 32, "SHEETS_ENABLED": False})
+
+
+def test_sheets_apagado_oculta_la_conexion_y_conserva_los_cursos_controlados(app_sin_sheets):
+    app = app_sin_sheets
+    c, _ = registrar(app, "Clinica A", "a@a.com")
+    pagina = c.get("/sheets").data.decode()
+    assert "Cursos controlados" in pagina and "Conectar con Google Sheets" not in pagina
+    assert "docs.google.com" not in pagina and "Estado" not in pagina
+    menu = c.get("/panel").data.decode()
+    assert "Cursos controlados" in menu and "Google Sheets" not in menu
+    # las opciones de cursos (que tambien usa el Excel) siguen guardandose
+    _post(c, accion="opciones", cursos="BLS\nACLS", exigir="1")
+    conn = core.conectar(app.config["DB_PATH"])
+    fila = conn.execute("SELECT cursos_controlados, exigir_cursos FROM empresas").fetchone()
+    assert fila["cursos_controlados"] == "BLS\nACLS" and fila["exigir_cursos"] == 1
+
+
+def test_sheets_apagado_rechaza_conectar_sincronizar_y_quitar(app_sin_sheets, cuenta):
+    c, _ = registrar(app_sin_sheets, "Clinica A", "a@a.com")
+    for accion in ("guardar", "sincronizar", "quitar"):
+        r = c.post("/sheets", data={"csrf": _csrf(c, "/sheets"), "accion": accion, "url": URL})
+        assert r.status_code == 404, accion
+    conn = core.conectar(app_sin_sheets.config["DB_PATH"])
+    assert conn.execute("SELECT sheet_url FROM empresas").fetchone()["sheet_url"] is None
+
+
+def test_el_programador_solo_sincroniza_sheets_si_esta_activado(monkeypatch):
+    import scheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    for activado, esperado in ((False, None), (True, "sync_sheets")):
+        monkeypatch.setattr(config, "SHEETS_ENABLED", activado)
+        sch = BackgroundScheduler(timezone="America/Bogota")
+        scheduler.registrar_jobs(sch)
+        assert (sch.get_job("sync_sheets").id if sch.get_job("sync_sheets") else None) == esperado

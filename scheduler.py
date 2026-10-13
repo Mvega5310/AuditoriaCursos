@@ -24,6 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
 from scripts.generar_alertas import ejecutar_alerta
+import config
 from sheets import sincronizar_todas
 
 logging.basicConfig(
@@ -39,14 +40,16 @@ ZONA_HORARIA = "America/Bogota"
 def registrar_jobs(scheduler) -> None:
     """Registra la sincronizacion con Google Sheets y las 4 alertas (Blocking para el script, Background para la web)."""
 
-    # Sincroniza los Google Sheets de los clientes ANTES de las alertas, todos los dias a las 06:30
-    scheduler.add_job(
-        sincronizar_todas,
-        CronTrigger(hour=6, minute=30, timezone=ZONA_HORARIA),
-        id="sync_sheets",
-        name="Sincronizar Google Sheets",
-        misfire_grace_time=3600,
-    )
+    # Sincroniza los Google Sheets de los clientes ANTES de las alertas, todos los dias a las 06:30.
+    # Solo si la funcion esta activada (SHEETS_ENABLED=1); por defecto esta apagada.
+    if config.SHEETS_ENABLED:
+        scheduler.add_job(
+            sincronizar_todas,
+            CronTrigger(hour=6, minute=30, timezone=ZONA_HORARIA),
+            id="sync_sheets",
+            name="Sincronizar Google Sheets",
+            misfire_grace_time=3600,
+        )
 
     # Alerta diaria: lunes a viernes, 07:00
     scheduler.add_job(
@@ -99,7 +102,7 @@ def main() -> None:
 
     log.info("=== Vencimientos: programador iniciado ===")
     log.info(f"  Zona horaria : {ZONA_HORARIA}")
-    log.info("  Google Sheets    : todos los dias a las 06:30")
+    log.info("  Google Sheets    : " + ("todos los dias a las 06:30" if config.SHEETS_ENABLED else "desactivado (SHEETS_ENABLED=0)"))
     log.info("  Alerta diaria    : dias habiles a las 07:00")
     log.info("  Alerta semanal   : el dia que elija cada empresa, 07:30 (festivo -> siguiente dia habil)")
     log.info("  Alerta quincenal : dias 1 y 15, 08:00 (fin de semana o festivo -> siguiente dia habil)")

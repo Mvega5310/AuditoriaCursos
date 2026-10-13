@@ -53,6 +53,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         DB_PATH=config.DB_PATH,
         APP_URL=config.APP_URL,
         RUN_SCHEDULER=config.RUN_SCHEDULER,
+        SHEETS_ENABLED=config.SHEETS_ENABLED,
         MAX_CONTENT_LENGTH=config.MAX_UPLOAD_MB * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -106,7 +107,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     def _plantillas():
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
-        return {"csrf": session["csrf"], "usuario": g.get("usuario")}
+        return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"]}
 
     @app.after_request
     def _cabeceras(resp):
@@ -472,6 +473,8 @@ def create_app(overrides: dict | None = None) -> Flask:
 
         if request.method == "POST":
             accion = request.form.get("accion")
+            if accion != "opciones" and not app.config["SHEETS_ENABLED"]:
+                abort(404)                      # conexion con Google Sheets apagada: solo quedan las opciones de cursos
             actual = estado()
             if accion == "quitar":
                 conn.execute("UPDATE empresas SET sheet_url = NULL, sheet_sync_estado = NULL, sheet_sync_detalle = NULL "
@@ -516,6 +519,7 @@ def create_app(overrides: dict | None = None) -> Flask:
             return redirect(url_for("hoja_google"))
 
         return render_template("sheets.html", e=estado(), activo=sheets.configurado(),
+                               habilitado=app.config["SHEETS_ENABLED"],
                                cuenta=sheets.email_cuenta_servicio())
 
     @app.route("/responsables", methods=["GET", "POST"])
