@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from config import (GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
+from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
 import core
 import correo
@@ -131,11 +131,13 @@ def _calcular_resumen(registros: list[dict]) -> dict:
 
 def configuracion_empresa(conn, empresa_id: int) -> dict:
     """Anticipacion (dias) y alertas que recibe la empresa."""
-    r = conn.execute("SELECT anticipacion_dias, alertas_activas FROM empresas WHERE id = ?", (empresa_id,)).fetchone()
+    r = conn.execute("SELECT anticipacion_dias, alertas_activas, dia_semanal FROM empresas WHERE id = ?",
+                     (empresa_id,)).fetchone()
     anticipacion = r["anticipacion_dias"] if r and r["anticipacion_dias"] is not None else ANTICIPACION_DEFECTO
     texto = r["alertas_activas"] if r and r["alertas_activas"] is not None else ",".join(ALERTAS)   # "" = ninguna
     activas = {x.strip() for x in texto.split(",") if x.strip()}
-    return {"anticipacion": anticipacion, "activas": activas,
+    dia = r["dia_semanal"] if r and r["dia_semanal"] is not None and 0 <= r["dia_semanal"] < len(DIAS_SEMANA) else 0
+    return {"anticipacion": anticipacion, "activas": activas, "dia_semanal": dia,
             "ventanas": {t: ventana_alerta(t, anticipacion) for t in ALERTAS}}
 
 
@@ -187,7 +189,10 @@ def _slug(texto: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in texto).strip("_").lower() or "empresa"
 
 
-def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_PATH) -> None:
+def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_PATH,
+                    respetar_dia: bool = False) -> None:
+    """respetar_dia=True (lo usa el programador): el aviso semanal solo sale a las empresas cuyo dia elegido es hoy.
+    Las ejecuciones manuales (script, pruebas) no filtran por dia."""
     if tipo not in ALERTAS:
         log.error(f"Tipo invalido: '{tipo}'. Opciones: {list(ALERTAS.keys())}")
         return
@@ -214,6 +219,9 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
             conf = configuracion_empresa(conn, emp["id"])
             if tipo not in conf["activas"]:
                 log.info(f"[{emp['nombre']}] La empresa no recibe la alerta '{tipo}'. Omitida.")
+                continue
+            if tipo == "semanal" and respetar_dia and conf["dia_semanal"] != hoy().weekday():
+                log.info(f"[{emp['nombre']}] Su aviso semanal es el {DIAS_SEMANA[conf['dia_semanal']]}. Omitida hoy.")
                 continue
             dias = conf["ventanas"][tipo]
             registros = consultar_vencimientos(conn, emp["id"], dias)

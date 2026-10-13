@@ -115,3 +115,66 @@ def test_excel_del_panel_no_ejecuta_formulas(app):
     wb = openpyxl.load_workbook(io.BytesIO(x.data))
     celda = wb["Vencimientos"]["A2"]
     assert celda.data_type == "s" and celda.value.startswith("=HYPERLINK")
+
+
+# ------------------------------------------------------------ dia del aviso semanal
+
+def _conf(app, nombre="Hospital Z"):
+    conn = core.conectar(app.config["DB_PATH"])
+    eid = conn.execute("SELECT id FROM empresas WHERE nombre = ?", (nombre,)).fetchone()["id"]
+    return conn, eid
+
+
+def test_dia_semanal_por_defecto_y_se_puede_elegir(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    conn, eid = _conf(app)
+    assert generar_alertas.configuracion_empresa(conn, eid)["dia_semanal"] == 0            # lunes
+    c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30", "dia_semanal": "2",
+                            "alertas": ["semanal"]})
+    assert generar_alertas.configuracion_empresa(conn, eid)["dia_semanal"] == 2
+    assert "Semanal (miércoles)" in c.get("/avisos").data.decode()
+
+
+def test_dia_semanal_invalido_no_se_guarda_y_si_falta_se_conserva(app):
+    c, _ = registrar(app, "Hospital Z", "z@z.com")
+    conn, eid = _conf(app)
+    c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30", "dia_semanal": "3"})
+    for malo in ("7", "-1", "sabado"):
+        c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "30", "dia_semanal": malo})
+        assert generar_alertas.configuracion_empresa(conn, eid)["dia_semanal"] == 3
+    c.post("/avisos", data={"csrf": _csrf(c, "/avisos"), "anticipacion": "20"})            # formulario antiguo, sin el campo
+    assert generar_alertas.configuracion_empresa(conn, eid)["dia_semanal"] == 3
+
+
+def test_programador_envia_el_semanal_solo_en_el_dia_de_cada_empresa(app, tmp_path, monkeypatch):
+    for nombre, correo in (("Hospital Z", "z@z.com"), ("Clinica Y", "y@y.com")):
+        c, _ = registrar(app, nombre, correo)
+        subir(c, _excel(FILAS))
+    conn, _ = _conf(app)
+    conn.execute("UPDATE empresas SET dia_semanal = 0 WHERE nombre = 'Hospital Z'")        # lunes
+    conn.execute("UPDATE empresas SET dia_semanal = 2 WHERE nombre = 'Clinica Y'")         # miercoles
+    conn.commit()
+    salidas = tmp_path / "salidas"
+    monkeypatch.setattr(generar_alertas, "SALIDAS_DIR", salidas)
+
+    def corre(dia_iso, **kw):                      # fecha de una semana conocida: 2026-10-12 es lunes
+        monkeypatch.setattr(generar_alertas, "hoy", lambda: __import__("datetime").date(2026, 10, 12 + dia_iso))
+        for f in salidas.glob("*") if salidas.exists() else []:
+            f.unlink()
+        generar_alertas.ejecutar_alerta("semanal", dry_run=True, db_path=app.config["DB_PATH"], **kw)
+        return sorted(p.name for p in salidas.glob("*")) if salidas.exists() else []
+
+    assert corre(0, respetar_dia=True) == ["alerta_semanal_hospital_z.html"]               # lunes
+    assert corre(1, respetar_dia=True) == []                                               # martes: nadie
+    assert corre(2, respetar_dia=True) == ["alerta_semanal_clinica_y.html"]                # miercoles
+    assert len(corre(3)) == 2                                                              # manual: todas, sin filtrar por dia
+
+
+def test_el_programador_revisa_el_semanal_de_lunes_a_viernes():
+    import scheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
+    sch = BackgroundScheduler(timezone="America/Bogota")
+    scheduler.registrar_jobs(sch)
+    job = sch.get_job("alerta_semanal")
+    assert str(job.trigger.fields[job.trigger.FIELD_NAMES.index("day_of_week")]) == "mon-fri"
+    assert job.kwargs == {"respetar_dia": True}

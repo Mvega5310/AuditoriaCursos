@@ -53,7 +53,7 @@ ALERTAS = {
     "semanal": {
         "periodo": 7,
         "faltantes": True,
-        "nombre": "Semanal (lunes)",
+        "nombre": "Semanal",
         "asunto": "Reporte Semanal — Documentos vencidos y próximos a vencer",
         "label": "Reporte Semanal — Vencidos y por vencer en los próximos {dias} días",
     },
@@ -72,6 +72,10 @@ ALERTAS = {
         "label": "Reporte Mensual — Vencidos y por vencer en los próximos {dias} días",
     },
 }
+
+
+# Dia de la semana en que cada empresa recibe el aviso semanal (indice = date.weekday())
+DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes"]
 
 
 def ventana_alerta(tipo: str, anticipacion: int | None = None) -> int:

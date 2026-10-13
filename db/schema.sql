@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS empresas (
     cursos_controlados TEXT,            -- una matriz: solo estos cursos (uno por linea; vacio = todos los que tengan fechas)
     exigir_cursos      INTEGER NOT NULL DEFAULT 0,  -- 1 = cada cargo debe tener los cursos controlados de su hoja (salvo los marcados N/A)
     anticipacion_dias  INTEGER NOT NULL DEFAULT 30, -- dias para gestionar una renovacion: ventana = periodo de la alerta + esto
-    alertas_activas    TEXT    NOT NULL DEFAULT 'diaria,semanal,quincenal,mensual'   -- que alertas recibe la empresa
+    alertas_activas    TEXT    NOT NULL DEFAULT 'diaria,semanal,quincenal,mensual',  -- que alertas recibe la empresa
+    dia_semanal        INTEGER NOT NULL DEFAULT 0   -- dia del aviso semanal: 0 = lunes ... 4 = viernes
 );
 
 -- Quien recibe las alertas de cada empresa (puede haber varios)

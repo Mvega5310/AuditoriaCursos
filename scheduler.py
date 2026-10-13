@@ -58,11 +58,12 @@ def registrar_jobs(scheduler) -> None:
         misfire_grace_time=3600,  # tolera hasta 1h de retraso si el PC estaba apagado
     )
 
-    # Alerta semanal: todos los lunes, 07:30
+    # Alerta semanal: se revisa de lunes a viernes a las 07:30; cada empresa la recibe el dia que elija (por defecto, lunes)
     scheduler.add_job(
         ejecutar_alerta,
-        CronTrigger(day_of_week="mon", hour=7, minute=30, timezone=ZONA_HORARIA),
+        CronTrigger(day_of_week="mon-fri", hour=7, minute=30, timezone=ZONA_HORARIA),
         args=["semanal"],
+        kwargs={"respetar_dia": True},
         id="alerta_semanal",
         name="Alerta semanal — 7 dias + anticipacion",
         misfire_grace_time=3600,

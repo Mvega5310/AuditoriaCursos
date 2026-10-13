@@ -331,7 +331,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.route("/avisos", methods=["GET", "POST"])
     @login_requerido
     def avisos():
-        from config import ALERTAS, ANTICIPACION_RANGO
+        from config import ALERTAS, ANTICIPACION_RANGO, DIAS_SEMANA
         from scripts.generar_alertas import configuracion_empresa
         eid, conn = g.usuario["empresa_id"], db()
         if request.method == "POST":
@@ -343,13 +343,22 @@ def create_app(overrides: dict | None = None) -> Flask:
                 flash(f"La anticipación debe estar entre {ANTICIPACION_RANGO[0]} y {ANTICIPACION_RANGO[1]} días.", "error")
                 return redirect(url_for("avisos"))
             activas = [t for t in ALERTAS if t in request.form.getlist("alertas")]
-            conn.execute("UPDATE empresas SET anticipacion_dias = ?, alertas_activas = ? WHERE id = ?",
-                         (anticipacion, ",".join(activas), eid))
+            dia = configuracion_empresa(conn, eid)["dia_semanal"]          # si el formulario no lo trae, se conserva
+            if request.form.get("dia_semanal", "") != "":
+                try:
+                    dia = int(request.form["dia_semanal"])
+                except ValueError:
+                    dia = -1
+                if not 0 <= dia < len(DIAS_SEMANA):
+                    flash("Elija un día de lunes a viernes para el aviso semanal.", "error")
+                    return redirect(url_for("avisos"))
+            conn.execute("UPDATE empresas SET anticipacion_dias = ?, alertas_activas = ?, dia_semanal = ? WHERE id = ?",
+                         (anticipacion, ",".join(activas), dia, eid))
             conn.commit()
             flash("Avisos guardados." if activas else "Avisos guardados. Ojo: no recibirá ningún correo.", "ok")
             return redirect(url_for("avisos"))
         return render_template("avisos.html", conf=configuracion_empresa(conn, eid), alertas=ALERTAS,
-                               rango=ANTICIPACION_RANGO)
+                               rango=ANTICIPACION_RANGO, dias=DIAS_SEMANA)
 
     @app.route("/importar", methods=["GET", "POST"])
     @login_requerido
