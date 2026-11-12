@@ -617,6 +617,38 @@ def create_app(overrides: dict | None = None) -> Flask:
         conn.commit()
         return redirect(url_for("responsables"))
 
+    # ------------------------------------------------------------ baja de avisos (sin iniciar sesion)
+    def _responsable_de_token(token):
+        """Fila del responsable que firma el token, o None. El enlace NO vence: una baja debe seguir
+        funcionando meses despues de que salio el correo."""
+        try:
+            rid = serializer.loads(token, salt="baja-avisos")
+        except BadSignature:                      # incluye SignatureExpired
+            return None
+        return db().execute("""SELECT r.id, r.email, r.activo, e.nombre AS empresa
+                               FROM responsables r JOIN empresas e ON e.id = r.empresa_id
+                               WHERE r.id = ?""", (rid,)).fetchone()
+
+    @app.get("/baja/<token>")
+    def baja(token):
+        """Pagina de confirmacion. El GET NO da de baja: el prefetch de Gmail y los escaneres
+        corporativos abren los enlaces solos y darian de baja a quien no lo pidio."""
+        r = _responsable_de_token(token)
+        if r is None:
+            abort(404)
+        return render_template("baja.html", r=r, hecho=not r["activo"])
+
+    @app.post("/baja/<token>")
+    def baja_confirmar(token):
+        r = _responsable_de_token(token)
+        if r is None:
+            abort(404)
+        conn = db()
+        conn.execute("UPDATE responsables SET activo = 0 WHERE id = ?", (r["id"],))
+        conn.commit()
+        log.info("Baja de avisos: responsable %s de la empresa %s", r["id"], r["empresa"])
+        return render_template("baja.html", r=r, hecho=True)
+
     @app.errorhandler(400)
     @app.errorhandler(404)
     @app.errorhandler(413)

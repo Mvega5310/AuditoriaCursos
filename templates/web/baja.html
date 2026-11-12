@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% block titulo %}Baja de avisos{% endblock %}
+{% block cuerpo %}
+<div class="card">
+{% if hecho %}
+  <h1>Listo, se dio de baja</h1>
+  <p><b>{{ r.email }}</b> ya no recibirá los avisos de vencimientos de <b>{{ r.empresa }}</b>.</p>
+  <p class="mut">Los demás responsables de la empresa siguen recibiéndolos. Si fue un error, un administrador
+  puede volver a agregar esta dirección desde <i>Responsables</i> dentro de la aplicación.</p>
+{% else %}
+  <h1>¿Dejar de recibir estos avisos?</h1>
+  <p>Vamos a dar de baja a <b>{{ r.email }}</b> de los avisos de vencimientos de <b>{{ r.empresa }}</b>.</p>
+  <p class="mut">Solo se da de baja esta dirección. Los demás responsables de la empresa seguirán
+  recibiendo los avisos con normalidad.</p>
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button>Sí, darme de baja</button></form>
+{% endif %}
+</div>
+{% endblock %}

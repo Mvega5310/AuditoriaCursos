@@ -23,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+import config
 from config import APP_URL
 from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
@@ -144,7 +145,7 @@ def configuracion_empresa(conn, empresa_id: int) -> dict:
 
 
 def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: list[dict] | None = None,
-                    dias: int | None = None) -> str:
+                    dias: int | None = None, baja_url: str | None = None) -> str:
     config = ALERTAS[tipo]
     dias = dias if dias is not None else ventana_alerta(tipo)
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_PATH.parent)), autoescape=True)
@@ -159,6 +160,7 @@ def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: l
         total_faltantes=sum(f["cantidad"] for f in (faltantes or [])),
         resumen=_calcular_resumen(registros),
         app_url=APP_URL,
+        baja_url=baja_url,
     )
 
 
@@ -169,6 +171,30 @@ def obtener_destinatarios(conn, empresa_id: int) -> list[str]:
     if not emails and RRHH_EMAIL:
         emails = [RRHH_EMAIL]
     return emails
+
+
+SALT_BAJA = "baja-avisos"
+
+
+def destinatarios(conn, empresa_id: int) -> list[dict]:
+    """Responsables activos CON su id, para poder firmar el enlace de baja de cada uno.
+    Si la empresa no tiene responsables, el correo de respaldo (RRHH_EMAIL) sin id: no es una fila de
+    `responsables`, asi que no lleva enlace de baja."""
+    filas = [{"id": r["id"], "email": r["email"]} for r in conn.execute(
+        "SELECT id, email FROM responsables WHERE empresa_id = ? AND activo = 1 ORDER BY id", (empresa_id,))]
+    if not filas and RRHH_EMAIL:
+        return [{"id": None, "email": RRHH_EMAIL}]
+    return filas
+
+
+def enlace_baja(responsable_id: int | None) -> str | None:
+    """URL firmada que da de baja UNICAMENTE a ese responsable: ni a los demas de su empresa, ni a otra empresa.
+    None si no hay fila que dar de baja, o si falta FLASK_SECRET_KEY (sin secreto no se puede firmar)."""
+    if responsable_id is None or not config.FLASK_SECRET_KEY:
+        return None
+    from itsdangerous import URLSafeTimedSerializer
+    token = URLSafeTimedSerializer(config.FLASK_SECRET_KEY).dumps(responsable_id, salt=SALT_BAJA)
+    return f"{APP_URL}/baja/{token}"
 
 
 def enviar_email(asunto: str, html_body: str, para: list[str], copia_oculta: list[str] | None = None) -> bool:
@@ -253,18 +279,28 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
                 log.info(f"[{emp['nombre']}] {len(registros)} registros, {len(faltantes)} personas con faltantes -> {destino.name} (no se envio correo)")
                 continue
 
-            para = obtener_destinatarios(conn, emp["id"])
-            if not para:
+            lista = destinatarios(conn, emp["id"])
+            if not lista:
                 log.error(f"[{emp['nombre']}] Sin destinatarios (agregue responsables o RRHH_EMAIL en .env).")
                 _registrar_log(conn, tipo, emp["id"], n_total, "", "sin_destinatario")
                 continue
 
+            para = [d["email"] for d in lista]
             log.info(f"[{emp['nombre']}] {len(registros)} registros, {len(faltantes)} personas con faltantes. Enviando a {', '.join(para)}...")
-            ok = enviar_email(asunto, html, para, [ADMIN_EMAIL] if ADMIN_EMAIL else None)
+            # UN correo por destinatario: cada uno lleva SU enlace de baja y no ve las direcciones de los demas.
+            # La copia al administrador (ADMIN_EMAIL) va solo en el primero, para no multiplicarla.
+            enviados, fallidos = [], []
+            for i, d in enumerate(lista):
+                cuerpo = renderizar_html(registros, tipo, emp["nombre"], faltantes, dias, enlace_baja(d["id"]))
+                cco = [ADMIN_EMAIL] if ADMIN_EMAIL and i == 0 else None
+                (enviados if enviar_email(asunto, cuerpo, [d["email"]], cco) else fallidos).append(d["email"])
             _registrar_log(conn, tipo, emp["id"], n_total, ", ".join(para),
-                           "enviado" if ok else "error_envio")
-            if ok:
-                log.info(f"[{emp['nombre']}] Correo enviado.")
+                           "enviado" if enviados else "error_envio",
+                           f"sin entregar: {', '.join(fallidos)}" if fallidos and enviados else "")
+            if not fallidos:
+                log.info(f"[{emp['nombre']}] Correo enviado a {len(enviados)} destinatario(s).")
+            elif enviados:
+                log.error(f"[{emp['nombre']}] Enviado a {len(enviados)}, fallo a: {', '.join(fallidos)}.")
             else:
                 log.error(f"[{emp['nombre']}] Fallo el envio del correo.")
     finally:

@@ -152,6 +152,20 @@ Así ningún documento queda entre dos correos sin margen para renovarlo.
 | Quincenal | días 1 y 15, 08:00 | 15 + 30 = 45 días |
 | Mensual | día 1, 08:30 | 30 + 30 = 60 días |
 
+### Darse de baja
+
+Cada aviso lleva al pie un enlace **«darse de baja»** firmado para ese destinatario en particular, así que
+funciona sin iniciar sesión y da de baja **solo esa dirección**: los demás responsables de la empresa siguen
+recibiendo los avisos. Por eso se envía **un correo por responsable** y no uno con todos en el *Para*
+(que además dejaba las direcciones de unos a la vista de los otros).
+
+El enlace no vence, y abrirlo no da de baja: muestra una página de confirmación, porque el *prefetch* de Gmail
+y los escáneres corporativos abren los enlaces por su cuenta. La baja se consuma al pulsar el botón.
+El destinatario de respaldo (`RRHH_EMAIL`) no lleva enlace, porque no corresponde a ninguna fila de `responsables`.
+
+Para volver a activar una dirección: menú **Responsables**, agregarla de nuevo. Para que una empresa deje de
+recibir **todo**, menú **Avisos**, desmarcando los avisos (eso no depende de los responsables).
+
 Cada empresa elige en la web (menú **Avisos**) su anticipación y qué avisos recibe. El **Panel** filtra por
 vencidos / 7 / 15 / 30 días, curso y ubicación, y descarga la lista filtrada en Excel. Al importar (o validar) se muestra
 cómo queda la empresa: vencidos y por vencer en 7, 15 y 30 días.
