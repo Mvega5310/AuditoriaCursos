@@ -45,7 +45,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-ESTADOS = ("vencido", "critico", "alerta", "proximo", "normal")
+ESTADOS = ("vencido", "critico", "alerta", "proximo", "normal", "indefinido")
 
 
 def _nombre(r) -> str:
@@ -84,15 +84,21 @@ def consultar_faltantes(conn, empresa_id: int) -> list[dict]:
     return resultado
 
 
-def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict]:
+def consultar_vencimientos(conn, empresa_id: int, dias_limite: int,
+                           incluir_indefinidos: bool = False) -> list[dict]:
     """Documentos de la empresa ya vencidos o que vencen dentro de dias_limite dias.
-    Excluye empleados inactivos y documentos sin fecha de vencimiento."""
+    Excluye empleados inactivos y documentos sin fecha de vencimiento.
+
+    Los de vigencia indefinida (modalidad de pago unico: la entidad imprime una fecha, pero el curso no se
+    renueva) NUNCA generan alertas, asi que por defecto quedan fuera. El panel los pide con
+    incluir_indefinidos=True para mostrarlos con estado INDEFINIDO en vez de VENCIDO."""
     hasta = (hoy() + timedelta(days=dias_limite)).isoformat()
     # Un documento con avisar_dias aparece en todas las alertas desde N dias antes de vencer,
     # aunque quede fuera de la ventana del reporte.
     filas = conn.execute("""
         SELECT e.cedula, e.nombre, e.apellido, e.area, e.cargo,
-               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento, d.avisar_dias
+               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento, d.avisar_dias,
+               d.vigencia_indefinida
         FROM documentos d
         JOIN tipos_documento t ON t.id = d.tipo_id
         LEFT JOIN empleados e  ON e.id = d.empleado_id
@@ -100,8 +106,10 @@ def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict
           AND d.fecha_vencimiento IS NOT NULL
           AND (d.fecha_vencimiento <= ? OR d.avisar_dias IS NOT NULL)
           AND (d.empleado_id IS NULL OR e.activo = 1)
+          {filtro_indefinidos}
         ORDER BY d.fecha_vencimiento ASC, e.apellido ASC, e.nombre ASC
-    """, (empresa_id, hasta)).fetchall()
+    """.replace("{filtro_indefinidos}", "" if incluir_indefinidos else "AND d.vigencia_indefinida = 0"),
+        (empresa_id, hasta)).fetchall()
 
     registros = []
     for r in filas:
@@ -109,6 +117,8 @@ def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict
         if r["fecha_vencimiento"] > hasta and not (r["avisar_dias"] is not None and dias <= r["avisar_dias"]):
             continue        # fuera de la ventana y todavia sin entrar en su aviso propio
         clase, label = clasificar(dias)
+        if r["vigencia_indefinida"]:
+            clase, label = "indefinido", "INDEFINIDO"     # su fecha impresa se conserva, pero no vence
         es_empresa = r["cedula"] is None
         documento = r["documento"] + (f" ({r['referencia']})" if r["referencia"] else "")
         registros.append({

@@ -265,7 +265,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos, configuracion_empresa
         eid, conn = g.usuario["empresa_id"], db()
         maximo = max(configuracion_empresa(conn, eid)["ventanas"].values())
-        todos = consultar_vencimientos(conn, eid, max(maximo, 30))
+        todos = consultar_vencimientos(conn, eid, max(maximo, 30), incluir_indefinidos=True)
         faltantes = consultar_faltantes(conn, eid)
         cursos = sorted({r["tipo"] for r in todos} | {c for x in faltantes for c in x["lista"]}, key=str.lower)
         ubicaciones = sorted({r["area"] for r in todos if r["area"]} | {x["area"] for x in faltantes if x["area"]},
@@ -275,26 +275,38 @@ def create_app(overrides: dict | None = None) -> Flask:
         curso = curso if curso in cursos else ""
         ubicacion = ubicacion if ubicacion in ubicaciones else ""
         ventana = request.args.get("ventana", str(maximo))
-        if ventana != "vencidos":
+        if ventana not in ("vencidos", "indefinidos"):
             ventana = str(min(max(int(ventana), 0), 365)) if ventana.isdigit() else str(maximo)
         base = [r for r in todos if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
-        resumen = {"vencidos": sum(1 for r in base if r["dias"] < 0),
-                   **{f"d{n}": sum(1 for r in base if 0 <= r["dias"] <= n) for n in (7, 15, 30)},
-                   "todos": sum(1 for r in base if r["dias"] <= maximo)}
+        # Los de vigencia indefinida (pago unico) se ven, pero no cuentan como vencidos ni como por vencer:
+        # su fecha impresa es administrativa y no hay nada que renovar.
+        vence = [r for r in base if r["clase"] != "indefinido"]
+        resumen = {"vencidos": sum(1 for r in vence if r["dias"] < 0),
+                   **{f"d{n}": sum(1 for r in vence if 0 <= r["dias"] <= n) for n in (7, 15, 30)},
+                   "todos": sum(1 for r in vence if r["dias"] <= maximo),
+                   "indefinidos": len(base) - len(vence)}
         if ventana == "vencidos":
-            registros, titulo = [r for r in base if r["dias"] < 0], "Vencidos"
+            registros, titulo = [r for r in vence if r["dias"] < 0], "Vencidos"
+        elif ventana == "indefinidos":
+            registros = [r for r in base if r["clase"] == "indefinido"]
+            titulo = "Vigencia indefinida — no se renuevan"
         else:
             n = int(ventana)
             if n > max(maximo, 30):
-                base = [r for r in consultar_vencimientos(conn, eid, n)
+                base = [r for r in consultar_vencimientos(conn, eid, n, incluir_indefinidos=True)
                         if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
             registros = [r for r in base if r["dias"] <= n]
-            v = sum(1 for r in registros if r["dias"] < 0)
-            titulo = f"Vencidos ({v}) y por vencer en {n} días ({len(registros) - v})"
+            ind = sum(1 for r in registros if r["clase"] == "indefinido")
+            v = sum(1 for r in registros if r["clase"] != "indefinido" and r["dias"] < 0)
+            titulo = f"Vencidos ({v}) y por vencer en {n} días ({len(registros) - v - ind})"
+            if ind:
+                titulo += f" · {ind} de vigencia indefinida"
         faltantes = [x for x in faltantes if (not curso or curso in x["lista"]) and (not ubicacion or x["area"] == ubicacion)]
         opciones = [("vencidos", "Solo vencidos")] + [(str(n), f"Vencidos + próximos {n} días")
                                                       for n in sorted({7, 15, 30, maximo})]
-        if ventana not in dict(opciones):
+        if resumen["indefinidos"]:
+            opciones.append(("indefinidos", "Solo vigencia indefinida"))
+        if ventana.isdigit() and ventana not in dict(opciones):
             opciones.append((ventana, f"Vencidos + próximos {ventana} días"))
         filtros = {"ventana": ventana, "curso": curso, "ubicacion": ubicacion}
         return dict(registros=registros, titulo=titulo, resumen=resumen, faltantes=faltantes, cursos=cursos,

@@ -54,7 +54,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from config import DB_PATH, DEFAULT_EMPRESA, VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS
-from core import (conectar, inicializar_db, es_v1, parsear_fecha, normalizar,
+from core import (conectar, inicializar_db, es_v1, parsear_fecha, normalizar, leer_indefinido,
                   resolver_categoria, hoy)
 
 ALIAS_DOCUMENTOS = {
@@ -92,6 +92,9 @@ ALIAS_DOCUMENTOS = {
     "observaciones": "observaciones",
     "fila origen": "fila_origen",          # uso interno (importacion de matriz)
     "no aplica": "no_aplica",              # uso interno (celda N/A de una matriz)
+    # 'Vigencia' = indefinida: ESTE certificado es de pago unico y no se renueva (se conserva la fecha impresa)
+    "vigencia": "vigencia_indefinida", "modalidad": "vigencia_indefinida",
+    "vigencia indefinida": "vigencia_indefinida",
 }
 ALIAS_EMPRESAS = {
     "empresa": "empresa", "nit": "nit", "sector": "sector",
@@ -284,24 +287,31 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
 
             no_aplica = 1 if _txt(row.get("no_aplica")) == "1" else 0
             emision = vencimiento = None
+            indefinida = 0
             if no_aplica:
                 stats["no_aplica"] += 1         # cuenta como cumplido; no genera alertas ni faltantes
             else:
                 emision_txt, venc_txt = _txt(row.get("fecha_emision")), _txt(row.get("fecha_vencimiento"))
+                # La marca puede venir en la columna 'Vigencia' o dentro de la celda de vencimiento
+                marca_col, _ = leer_indefinido(_txt(row.get("vigencia_indefinida")))
+                marca_celda, venc_txt = leer_indefinido(venc_txt)
+                indefinida = 1 if (marca_col or marca_celda) else 0
                 emision, vencimiento = parsear_fecha(emision_txt), parsear_fecha(venc_txt)
                 if emision_txt and not emision:
                     raise ValueError(f"fecha de emision invalida: '{emision_txt}'")
                 if venc_txt and not vencimiento:
                     raise ValueError(f"fecha de vencimiento invalida: '{venc_txt}'")
-                if not vencimiento and periodicidad and emision:
+                if not vencimiento and periodicidad and emision and not indefinida:
                     vencimiento = (date.fromisoformat(emision) + timedelta(days=periodicidad)).isoformat()
                 if emision and vencimiento and vencimiento < emision:
                     raise ValueError("la fecha de vencimiento es anterior a la de emision")
                 limite = hoy() - timedelta(days=365 * VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS)
-                if vencimiento and vencimiento < limite.isoformat():
+                if vencimiento and vencimiento < limite.isoformat() and not indefinida:
                     raise FechaDudosa(f"vence el {date.fromisoformat(vencimiento).strftime('%d/%m/%Y')}, hace mas de "
                                       f"{VENCIMIENTO_MAX_ANTIGUEDAD_ANIOS} anos")
-                if not vencimiento:
+                if indefinida:
+                    stats["indefinidos"] += 1       # se guarda con su fecha impresa, pero no generara alertas
+                elif not vencimiento:
                     stats["sin_vencimiento"] += 1   # se guarda, pero no generara alertas
 
             avisar_txt, avisar = _txt(row.get("avisar_dias")), None
@@ -320,12 +330,12 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
                   AND tipo_id = ? AND referencia = ?
             """, (empresa_id, empleado_id, tipo_id, referencia)).fetchone()
 
-            valores = (emision, vencimiento, no_aplica, avisar, _txt(row.get("entidad")), _txt(row.get("archivo")),
-                       _txt(row.get("observaciones")), hoy().isoformat())
+            valores = (emision, vencimiento, no_aplica, indefinida, avisar, _txt(row.get("entidad")),
+                       _txt(row.get("archivo")), _txt(row.get("observaciones")), hoy().isoformat())
             if existente:
                 cur.execute("""
                     UPDATE documentos SET
-                        fecha_emision = ?, fecha_vencimiento = ?, no_aplica = ?,
+                        fecha_emision = ?, fecha_vencimiento = ?, no_aplica = ?, vigencia_indefinida = ?,
                         avisar_dias     = COALESCE(?, avisar_dias),
                         entidad_emisora = COALESCE(NULLIF(?, ''), entidad_emisora),
                         archivo         = COALESCE(NULLIF(?, ''), archivo),
@@ -337,9 +347,9 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
             else:
                 cur.execute("""
                     INSERT INTO documentos (empresa_id, empleado_id, tipo_id, referencia,
-                        fecha_emision, fecha_vencimiento, no_aplica, avisar_dias, entidad_emisora, archivo,
-                        observaciones, actualizado_en)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        fecha_emision, fecha_vencimiento, no_aplica, vigencia_indefinida, avisar_dias,
+                        entidad_emisora, archivo, observaciones, actualizado_en)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (empresa_id, empleado_id, tipo_id, referencia) + valores)
                 stats["nuevos"] += 0 if no_aplica else 1
         except FechaDudosa as e:
@@ -350,6 +360,14 @@ def _importar_documentos(cur, df: pd.DataFrame, empresa_defecto: str, stats: dic
         except Exception as e:
             etiqueta = f"Fila {fila}" + (f" ({nombre_doc})" if nombre_doc else "")
             stats["errores"].append(f"{etiqueta}: {e} — omitida")
+
+
+def _celda_de_curso(valor) -> bool:
+    """La celda aporta informacion de un curso: una fecha, o la marca de vigencia indefinida.
+    Sin esto, una columna en la que TODOS tienen la modalidad de pago unico (sin fecha legible)
+    se descartaria como 'no es un curso'."""
+    marca, resto = leer_indefinido(_txt(valor))
+    return marca or bool(parsear_fecha(resto, serial=False))
 
 
 def _normalizar_curso(base: str) -> tuple[str, int | None]:
@@ -399,10 +417,10 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
     for base, cols in cursos.items():
         nombre, vig_cabecera = _normalizar_curso(base)
         if solo_cursos and not _coincide(nombre, solo_cursos) and not _coincide(base, solo_cursos):
-            if any(parsear_fecha(_txt(v), serial=False) for c in cols.values() for v in df[c]):
+            if any(_celda_de_curso(v) for c in cols.values() for v in df[c]):
                 stats["columnas_no_controladas"].append(nombre)
             continue
-        if not any(parsear_fecha(_txt(v), serial=False) for c in cols.values() for v in df[c]):
+        if not any(_celda_de_curso(v) for c in cols.values() for v in df[c]):
             stats["columnas_ignoradas"].append(nombre)           # ninguna fecha: no es un curso
             continue
         _, vig_catalogo = _resolver_tipo(cur, None, nombre, False)
@@ -462,10 +480,14 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
             celdas = {r: v for r, v in celdas.items() if v and normalizar(v) not in CELDAS_VACIAS}
             if not celdas:
                 continue                                          # pendiente: sin registro (sera un faltante si se exige)
-            fechas_ok, malas = {}, []
+            fechas_ok, malas, indefinida = {}, [], False
             for r, v in celdas.items():
                 if normalizar(v) in CELDAS_NO_APLICA:
                     continue
+                marca, v = leer_indefinido(v)        # 'INDEF: 30/06/2024' -> conserva la fecha impresa
+                indefinida = indefinida or marca
+                if marca and not v:
+                    continue                         # 'INDEFINIDO' solo: sin fecha que leer
                 f = parsear_fecha(v)
                 if f:
                     fechas_ok[r] = f
@@ -476,12 +498,18 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
             for v in malas:
                 stats["errores"].append(f"{ubic}fila {fila}, {quien}, columna '{c['nombre']}': fecha invalida '{v}' — omitida, corrijala en el archivo")
             if not fechas_ok:
-                if not malas:                                     # todo N/A
+                if indefinida:                                    # 'INDEFINIDO' sin fecha: vale, no se renueva
+                    filas.append({**base_fila, "documento": c["nombre"], "vigencia_indefinida": "indefinida"})
+                elif not malas:                                   # todo N/A
                     filas.append({**base_fila, "documento": c["nombre"], "no_aplica": "1"})
                 continue
             if c["par"]:
                 emision = fechas_ok.get("ini")
                 venc = fechas_ok.get("fin")
+                if not venc and indefinida:                       # de pago unico: no necesita fecha final
+                    filas.append({**base_fila, "documento": c["nombre"], "fecha_emision": emision,
+                                  "vigencia_indefinida": "indefinida"})
+                    continue
                 if not venc:                                      # sin fecha final: se descarta, no se inventa
                     if not malas:
                         stats["sin_fecha_final"][c["nombre"]] = stats["sin_fecha_final"].get(c["nombre"], 0) + 1
@@ -491,7 +519,8 @@ def _importar_matriz(cur, df: pd.DataFrame, empresa_defecto: str, stats: dict,
                 venc = (date.fromisoformat(emision) + timedelta(days=c["vigencia"])).isoformat()
             else:
                 emision, venc = None, fechas_ok["col"]
-            filas.append({**base_fila, "documento": c["nombre"], "fecha_emision": emision, "fecha_vencimiento": venc})
+            filas.append({**base_fila, "documento": c["nombre"], "fecha_emision": emision, "fecha_vencimiento": venc,
+                          **({"vigencia_indefinida": "indefinida"} if indefinida else {})})
     if filas:
         _importar_documentos(cur, pd.DataFrame(filas, dtype=object), empresa_defecto, stats)
     stats["personas_matriz"] += len(personas)
@@ -699,6 +728,7 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
 
     stats = {"empresas": set(), "responsables": 0, "nuevos": 0, "actualizados": 0,
              "sin_vencimiento": 0, "requisitos": 0, "personas_matriz": 0, "no_aplica": 0, "retirados": 0,
+             "indefinidos": 0,
              "sin_fecha_final": {}, "columnas_ignoradas": [], "columnas_no_controladas": [], "hojas_ignoradas": [], "errores": [],
              "fechas_dudosas": []}
     if verbose:
@@ -736,6 +766,7 @@ def importar(ruta_excel: str | Path | None, db_path: Path | str = DB_PATH,
             print(f"  Personas en matriz:     {stats['personas_matriz']}")
         print(f"  Requisitos por cargo:   {stats['requisitos']}")
         print(f"  Cursos marcados N/A:    {stats['no_aplica']}   Personal retirado (inactivo): {stats['retirados']}")
+        print(f"  Vigencia indefinida:    {stats['indefinidos']}   (pago unico: no generan alertas)")
         print(f"  Sin fecha de vencimiento (no generan alertas): {stats['sin_vencimiento']}")
         if stats["columnas_ignoradas"]:
             print(f"  Columnas de la matriz ignoradas (sin fechas): {', '.join(stats['columnas_ignoradas'])}")

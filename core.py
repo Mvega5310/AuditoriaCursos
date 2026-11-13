@@ -201,6 +201,8 @@ def _asegurar_columnas(conn) -> None:
         conn.execute("ALTER TABLE documentos ADD COLUMN avisar_dias INTEGER")
     if "no_aplica" not in cols_doc:
         conn.execute("ALTER TABLE documentos ADD COLUMN no_aplica INTEGER NOT NULL DEFAULT 0")
+    if "vigencia_indefinida" not in cols_doc:
+        conn.execute("ALTER TABLE documentos ADD COLUMN vigencia_indefinida INTEGER NOT NULL DEFAULT 0")
     if "consentimiento_en" not in columnas("empresas"):
         conn.execute("ALTER TABLE empresas ADD COLUMN consentimiento_en TEXT")
     cols_empresa = columnas("empresas")
@@ -264,6 +266,24 @@ def parsear_fecha(valor, serial: bool = True) -> str | None:
         except ValueError:
             return None
     return None
+
+
+# Un mismo curso puede venderse en dos modalidades: renovable (mas barata, vence) o de pago unico
+# (no se renueva). Lo que decide es lo que pago CADA persona, asi que se marca por documento, no por curso.
+# En una celda: 'INDEFINIDO' solo, o con la fecha impresa en el certificado ('INDEF: 30/06/2024').
+MARCAS_INDEFINIDO = ("indefinido", "indefinida", "indef", "permanente", "vitalicio")
+_RE_INDEFINIDO = re.compile(r"^\s*(?:%s)\b\s*[:;_\-]*\s*" % "|".join(MARCAS_INDEFINIDO), re.IGNORECASE)
+
+
+def leer_indefinido(valor) -> tuple[bool, str]:
+    """('INDEF: 30/06/2024') -> (True, '30/06/2024'). Devuelve (False, texto) si no trae la marca.
+    El resto del texto se deja tal cual para que lo lea parsear_fecha (puede quedar vacio)."""
+    if valor is None:
+        return False, ""
+    texto = str(valor).strip()
+    if not _RE_INDEFINIDO.match(normalizar(texto)):
+        return False, texto
+    return True, _RE_INDEFINIDO.sub("", texto).strip()
 
 
 def dias_restantes(fecha_vencimiento: str, referencia: date | None = None) -> int:

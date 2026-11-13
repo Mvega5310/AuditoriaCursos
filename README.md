@@ -135,6 +135,33 @@ python scripts/agregar_documento.py listar --sector salud
 - `--avisar-dias N` (o la columna **Avisar Dias** del Excel): el documento aparece en **todas** las alertas (diaria, semanal, etc.) desde N días antes de vencer, además de las ventanas normales.
 - Sin fecha de vencimiento el documento se guarda, pero no genera alertas.
 
+## Cursos de vigencia indefinida (pago único)
+
+Un mismo curso puede venderse en dos modalidades: **renovable** (más barata, vence y hay que repetirla) o de
+**pago único** (más cara, no se renueva). Algunas entidades imprimen igual una fecha de vencimiento en el
+certificado de pago único, y ese documento aparecía como `VENCIDO` para siempre.
+
+Como lo que decide es **lo que pagó cada persona**, la marca es **por documento**, nunca por nombre de curso:
+marcarla por curso apagaría las alertas de la mayoría, que sí tiene la modalidad renovable y sí debe renovar.
+
+Se marca desde el propio Excel, con `INDEFINIDO` (también `INDEFINIDA`, `INDEF`, `PERMANENTE`, `VITALICIO`):
+
+| Celda | Resultado |
+|---|---|
+| `INDEFINIDO` | No se renueva, sin fecha |
+| `INDEF: 30/06/2024` | No se renueva y **se conserva** la fecha impresa del certificado |
+| `30/06/2024` | Normal: vence y genera alertas |
+
+En el formato de lista también sirve una columna **`Vigencia`** (o `Modalidad`) con el valor `indefinida`.
+
+Esos documentos **nunca generan alertas**, cuentan como presentes para los requisitos por cargo, y en el panel
+aparecen con estado `INDEFINIDO` (en su propio KPI, fuera de «Vencidos»), de modo que en una auditoría se ve
+el certificado, su fecha impresa y el motivo por el que no se reporta como vencido.
+
+> **Ojo:** es una decisión de cumplimiento. Hay cursos cuya renovación es obligatoria por norma
+> independientemente de lo que cobre la entidad. Marcar como indefinido un curso que la ley exige renovar
+> hace que el sistema certifique un cumplimiento que no existe. Confírmelo contra la norma antes de marcarlo.
+
 ## Estados
 
 `VENCIDO` (< 0 días) · `CRITICO` (0–7) · `ALERTA` (8–15) · `PROXIMO` (16–30) · `NORMAL` (> 30). Los umbrales se ajustan en `config.py`.
