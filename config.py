@@ -112,6 +112,9 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
 # 1 solo si la app esta detras de UN proxy de confianza (Railway): toma la IP real de X-Forwarded-For.
 # En local dejelo en 0: si no hay proxy, cualquiera podria falsear esa cabecera.
 TRUST_PROXY = os.getenv("TRUST_PROXY", "0") == "1"
+# Cuentas (correos separados por coma) que ven la pantalla /admin: todas las empresas, sus responsables y los envios.
+# Vacio = nadie la ve. Es la unica vista que cruza empresas: no la abra a cuentas de clientes.
+SUPERADMIN_EMAILS = {e.strip().lower() for e in (os.getenv("SUPERADMIN_EMAILS") or "").split(",") if e.strip()}
 # 1 = activa la conexion con Google Sheets (pagina, sincronizacion de las 6:30). Apagado por defecto.
 SHEETS_ENABLED = os.getenv("SHEETS_ENABLED", "0") == "1"
 # 1 = la propia app ejecuta las alertas programadas (necesario en Railway: el volumen se une a un solo servicio)

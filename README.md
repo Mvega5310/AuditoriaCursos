@@ -139,6 +139,17 @@ python scripts/agregar_documento.py listar --sector salud
 - `--avisar-dias N` (o la columna **Avisar Dias** del Excel): el documento aparece en **todas** las alertas (diaria, semanal, etc.) desde N días antes de vencer, además de las ventanas normales.
 - Sin fecha de vencimiento el documento se guarda, pero no genera alertas.
 
+## Administración del sistema
+
+`/admin` muestra, para quien opera el servicio, **todas las empresas**: cuántas personas y documentos tienen, cuántos vencidos, **quién recibe sus
+avisos**, cuándo fue el último envío y cuántos fallos hubo esta semana; los últimos 40 envíos de todas las empresas; el proveedor de correo, el
+estado del programador, y a dónde van `ADMIN_EMAIL` (copia de todos los envíos) y `RRHH_EMAIL` (respaldo de empresas sin responsables).
+Avisa de las empresas que **no recibirán ningún aviso** (sin responsables ni respaldo, o con todos los avisos apagados).
+
+Es la única pantalla que cruza empresas, así que solo la ven las cuentas listadas en la variable `SUPERADMIN_EMAILS` (correos separados por
+coma, el correo con el que ingresa a la app). Sin la variable, nadie la ve; para cualquier otra cuenta responde 404 y ni siquiera aparece en el
+menú. Solo muestra conteos y correos de responsables: nunca cédulas ni datos de las personas.
+
 ## Documentos: ver, agregar, editar y eliminar desde la web
 
 El menú **Documentos** lista todo lo de la empresa (con búsqueda por nombre, cédula o documento) y permite, sin rehacer el Excel:

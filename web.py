@@ -18,7 +18,7 @@ import secrets
 import sys
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
@@ -60,6 +60,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         APP_URL=config.APP_URL,
         RUN_SCHEDULER=config.RUN_SCHEDULER,
         SHEETS_ENABLED=config.SHEETS_ENABLED,
+        SUPERADMIN_EMAILS=config.SUPERADMIN_EMAILS,
         MAX_CONTENT_LENGTH=config.MAX_UPLOAD_MB * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -116,11 +117,15 @@ def create_app(overrides: dict | None = None) -> Flask:
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
         return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"],
-                "app_url": config.APP_URL}
+                "app_url": config.APP_URL, "es_superadmin": _es_superadmin()}
 
     def _huella_clave(password_hash: str) -> str:
         """Identifica la clave vigente sin exponerla: cambia cuando la clave cambia."""
         return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+    def _es_superadmin() -> bool:
+        u = g.get("usuario")
+        return bool(u) and u["email"].lower() in app.config["SUPERADMIN_EMAILS"]
 
     huellas: dict[str, str] = {}
 
@@ -882,6 +887,62 @@ def create_app(overrides: dict | None = None) -> Flask:
         flash("Persona marcada como retirada: ya no genera avisos." if not activo else "Persona reactivada.", "ok")
         return redirect(url_for("documento_editar", did=did))
 
+    # ------------------------------------------------------------ administrador del sistema (cruza empresas)
+    @app.get("/admin")
+    @login_requerido
+    def admin():
+        """Todas las empresas, quien recibe sus avisos y que se envio. SOLO cuentas de SUPERADMIN_EMAILS; para el resto
+        responde 404 (no revela que existe). Muestra conteos, nunca cedulas ni datos de empleados."""
+        if not _es_superadmin():
+            abort(404)
+        conn = db()
+
+        def por_empresa(sql, params=()):
+            return {r[0]: r[1] for r in conn.execute(sql, params)}
+
+        usuarios = por_empresa("SELECT empresa_id, COUNT(*) FROM usuarios GROUP BY empresa_id")
+        personas = por_empresa("SELECT empresa_id, COUNT(*) FROM empleados WHERE activo = 1 GROUP BY empresa_id")
+        documentos_n = por_empresa("SELECT empresa_id, COUNT(*) FROM documentos GROUP BY empresa_id")
+        vencidos = por_empresa("""SELECT d.empresa_id, COUNT(*) FROM documentos d LEFT JOIN empleados e ON e.id = d.empleado_id
+                                  WHERE d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento < ? AND d.vigencia_indefinida = 0
+                                    AND d.no_aplica = 0 AND (d.empleado_id IS NULL OR e.activo = 1)
+                                  GROUP BY d.empresa_id""", (hoy().isoformat(),))
+        ultimo_envio = por_empresa("SELECT empresa_id, MAX(fecha_envio) FROM log_alertas WHERE estado = 'enviado' GROUP BY empresa_id")
+        desde = (datetime.now() - timedelta(days=7)).isoformat(timespec="seconds")
+        fallos = por_empresa("""SELECT empresa_id, COUNT(*) FROM log_alertas
+                                WHERE estado IN ('error_envio', 'sin_destinatario') AND fecha_envio >= ? GROUP BY empresa_id""", (desde,))
+        resp: dict[int, list[str]] = {}
+        for r in conn.execute("SELECT empresa_id, email FROM responsables WHERE activo = 1 ORDER BY id"):
+            resp.setdefault(r["empresa_id"], []).append(r["email"])
+
+        empresas = []
+        for e in conn.execute("""SELECT id, nombre, sector, activa, consentimiento_en, alertas_activas
+                                 FROM empresas ORDER BY nombre"""):
+            activas = [x for x in (e["alertas_activas"] or "").split(",") if x]
+            empresas.append({
+                "id": e["id"], "nombre": e["nombre"], "sector": e["sector"] or "—", "activa": bool(e["activa"]),
+                "alta": (e["consentimiento_en"] or "")[:10] or "—", "usuarios": usuarios.get(e["id"], 0),
+                "personas": personas.get(e["id"], 0), "documentos": documentos_n.get(e["id"], 0),
+                "vencidos": vencidos.get(e["id"], 0), "responsables": resp.get(e["id"], []), "avisos": activas,
+                "ultimo_envio": (ultimo_envio.get(e["id"]) or "")[:16].replace("T", " ") or "nunca",
+                "fallos": fallos.get(e["id"], 0),
+                # Una empresa que no recibira nada: sin responsables (ni respaldo) o sin avisos activos
+                "silenciosa": e["activa"] and (not activas or not (resp.get(e["id"]) or config.RRHH_EMAIL))})
+
+        nombres = {e["id"]: e["nombre"] for e in empresas}
+        envios = [{"cuando": (r["fecha_envio"] or "")[:16].replace("T", " "), "empresa": nombres.get(r["empresa_id"], "—"),
+                   "tipo": r["tipo_alerta"], "estado": r["estado"], "destinatario": r["destinatario"] or "—",
+                   "detalle": r["detalle"] or ""}
+                  for r in conn.execute("""SELECT fecha_envio, empresa_id, tipo_alerta, estado, destinatario, detalle
+                                           FROM log_alertas ORDER BY id DESC LIMIT 40""")]
+        por_estado = por_empresa("SELECT estado, COUNT(*) FROM log_alertas WHERE fecha_envio >= ? GROUP BY estado", (desde,))
+        sch = app.extensions.get("scheduler")
+        trabajos = sorted(((j.name, j.next_run_time) for j in sch.get_jobs() if j.next_run_time), key=lambda x: x[1]) if sch else []
+        return render_template("admin.html", empresas=empresas, envios=envios, por_estado=por_estado,
+                               activas=sum(1 for e in empresas if e["activa"]), silenciosas=[e["nombre"] for e in empresas if e["silenciosa"]],
+                               scheduler=bool(sch), trabajos=trabajos, proveedor=correo.proveedor() or "ninguno",
+                               rrhh=config.RRHH_EMAIL, admin_email=config.ADMIN_EMAIL, zona=config.ZONA_HORARIA)
+
     # ------------------------------------------------------------ baja de avisos (sin iniciar sesion)
     def _responsable_de_token(token):
         """Fila del responsable que firma el token, o None. El enlace NO vence: una baja debe seguir
@@ -928,6 +989,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         sch = BackgroundScheduler(timezone=config.ZONA_HORARIA)
         registrar_jobs(sch)
         sch.start()
+        app.extensions["scheduler"] = sch
         log.info("Alertas programadas activas dentro de la app web.")
 
     return app
