@@ -304,9 +304,10 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
                 cuerpo = renderizar_html(registros, tipo, emp["nombre"], faltantes, dias, enlace_baja(d["id"]))
                 cco = [ADMIN_EMAIL] if ADMIN_EMAIL and i == 0 else None
                 (enviados if enviar_email(asunto, cuerpo, [d["email"]], cco) else fallidos).append(d["email"])
+            contenido = f"{len(registros)} vencimientos, {sum(f['cantidad'] for f in faltantes)} sin registrar"
             _registrar_log(conn, tipo, emp["id"], n_total, ", ".join(para),
                            "enviado" if enviados else "error_envio",
-                           f"sin entregar: {', '.join(fallidos)}" if fallidos and enviados else "")
+                           contenido + (f"; sin entregar: {', '.join(fallidos)}" if fallidos and enviados else ""))
             if not fallidos:
                 log.info(f"[{emp['nombre']}] Correo enviado a {len(enviados)} destinatario(s).")
             elif enviados:

@@ -23,6 +23,7 @@
 <a class="kpi {{ 'sel' if f.ventana == '15' }}" href="{{ enlace(15) }}"><b class="alerta">{{ resumen.d15 }}</b>Vencen en 15 días</a>
 <a class="kpi {{ 'sel' if f.ventana == '30' }}" href="{{ enlace(30) }}"><b>{{ resumen.d30 }}</b>Vencen en 30 días</a>
 <a class="kpi {{ 'sel' if f.ventana == str_max }}" href="{{ enlace(maximo) }}"><b>{{ resumen.todos }}</b>Todo ({{ maximo }} días)</a>
+{% if resumen.sin_registrar %}<a class="kpi" href="{{ url_for('panel', ventana=f.ventana, curso=f.curso or None, ubicacion=f.ubicacion or None, pf=1, _anchor='faltantes') }}"><b class="alerta">{{ resumen.sin_registrar }}</b>Sin registrar</a>{% endif %}
 {% if resumen.indefinidos %}<a class="kpi {{ 'sel' if f.ventana == 'indefinidos' }}" href="{{ enlace('indefinidos') }}"><b class="indefinido">{{ resumen.indefinidos }}</b>Vigencia indefinida</a>{% endif %}
 </div>
 {% if not empleados and not total_empresa %}<div class="card"><p>Aún no hay datos. <a href="{{ url_for('importar_vista') }}">Importe su Excel</a> para empezar.</p></div>{% endif %}

@@ -302,6 +302,9 @@ def create_app(overrides: dict | None = None) -> Flask:
             if ind:
                 titulo += f" · {ind} de vigencia indefinida"
         faltantes = [x for x in faltantes if (not curso or curso in x["lista"]) and (not ubicacion or x["area"] == ubicacion)]
+        # Los exigidos sin registrar no tienen fecha, asi que no entran en los KPI de vencimientos, pero SI viajan en
+        # los avisos: tienen su propio contador para que el panel nunca marque ceros mientras salen correos.
+        resumen["sin_registrar"] = sum(x["cantidad"] for x in faltantes)
         opciones = [("vencidos", "Solo vencidos")] + [(str(n), f"Vencidos + próximos {n} días")
                                                       for n in sorted({7, 15, 30, maximo})]
         if resumen["indefinidos"]:
@@ -342,7 +345,7 @@ def create_app(overrides: dict | None = None) -> Flask:
                                  (g.usuario["empresa_id"],)).fetchone()[0]
         return render_template("panel.html", registros=registros, pag_v=pag_v, faltantes=faltantes, pag_f=pag_f,
                                # la lista de faltantes empieza plegada; se abre si el usuario esta paginandola
-                               abrir_faltantes="pf" in request.args,
+                               abrir_faltantes="pf" in request.args or (not registros and pag_f["total"] > 0),
                                pf_actual=pag_f["pagina"] if "pf" in request.args else None,
                                empleados=empleados, hoy=hoy().strftime("%d/%m/%Y"), **datos)
 
@@ -484,7 +487,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         html = renderizar_html(registros, tipo, g.usuario["empresa"], faltantes, dias)
         destinatarios = [r["email"] for r in conn.execute(
             "SELECT email FROM responsables WHERE empresa_id = ? AND activo = 1 ORDER BY id", (eid,))]
-        historial = conn.execute("""SELECT fecha_envio, tipo_alerta, documentos_notificados, destinatario, estado
+        historial = conn.execute("""SELECT fecha_envio, tipo_alerta, documentos_notificados, destinatario, estado, detalle
                                     FROM log_alertas WHERE empresa_id = ? ORDER BY id DESC LIMIT 15""", (eid,)).fetchall()
         return render_template("alertas.html", tipo=tipo, tipos=tipos, html=html, destinatarios=destinatarios,
                                n_registros=len(registros), n_faltantes=len(faltantes), historial=historial,
