@@ -242,6 +242,13 @@ python web.py                            # http://localhost:8000
 Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada desde v1):
 `python scripts/crear_usuario.py --empresa "Hospital Universitario" --email admin@hospital.com`
 
+### Recuperar la contraseña
+
+En el login, «¿Olvidó su contraseña?» envía un enlace al correo de la cuenta. El enlace vence en **1 hora** y sirve **una sola vez**
+(lleva una huella de la clave vigente: al cambiarla deja de valer, sin guardar tokens en la base). La respuesta es la misma exista o no la
+cuenta, para no revelar qué correos están registrados, y las solicitudes se limitan por IP. Al restablecer, las sesiones abiertas en otros
+dispositivos con la clave anterior se cierran, y el correo queda verificado (poder leerlo prueba que es suyo).
+
 ## Base de datos: SQLite o Postgres
 
 - Sin `DATABASE_URL` se usa el archivo SQLite `db/cursos.db` (desarrollo).

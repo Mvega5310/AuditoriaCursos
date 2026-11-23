@@ -42,6 +42,7 @@ SECTORES = {"salud": "Salud", "alimentos": "Alimentos", "construccion": "Constru
 RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 10
 INTENTOS_MAX, VENTANA_SEG = 5, 15 * 60
+RESTABLECER_SEG = 3600          # vigencia del enlace para restablecer la contrasena
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")   # icono al "agregar a la pantalla de inicio"
@@ -98,10 +99,12 @@ def create_app(overrides: dict | None = None) -> Flask:
         uid = session.get("uid")
         if uid:
             g.usuario = db().execute("""
-                SELECT u.id, u.email, u.rol, u.empresa_id, e.nombre AS empresa, e.sector
+                SELECT u.id, u.email, u.rol, u.empresa_id, u.password_hash, e.nombre AS empresa, e.sector
                 FROM usuarios u JOIN empresas e ON e.id = u.empresa_id
                 WHERE u.id = ? AND u.verificado = 1 AND e.activa = 1""", (uid,)).fetchone()
-            if g.usuario is None:
+            # Si la clave cambio despues de abrir esta sesion (p. ej. al restablecerla), la sesion deja de valer
+            if g.usuario is None or session.get("ph") != _huella_clave(g.usuario["password_hash"]):
+                g.usuario = None
                 session.clear()
         if request.method == "POST":
             enviado = request.form.get("csrf", "")
@@ -114,6 +117,10 @@ def create_app(overrides: dict | None = None) -> Flask:
             session["csrf"] = secrets.token_hex(16)
         return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"],
                 "app_url": config.APP_URL}
+
+    def _huella_clave(password_hash: str) -> str:
+        """Identifica la clave vigente sin exponerla: cambia cuando la clave cambia."""
+        return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
 
     huellas: dict[str, str] = {}
 
@@ -252,7 +259,79 @@ def create_app(overrides: dict | None = None) -> Flask:
         session.clear()
         session.permanent = True
         session["uid"] = u["id"]
+        session["ph"] = _huella_clave(u["password_hash"])
         return redirect(url_for("panel"))
+
+    # ------------------------------------------------------------ recuperar contrasena
+    def _enlace_restablecer(usuario) -> str:
+        """El token lleva una huella del hash ACTUAL de la clave: en cuanto se cambia, el enlace deja de servir
+        (uso unico) sin tener que guardar tokens en la base."""
+        huella = _huella_clave(usuario["password_hash"])
+        token = serializer.dumps([usuario["id"], huella], salt="restablecer-clave")
+        return f"{app.config['APP_URL']}/restablecer/{token}"
+
+    def _usuario_de_token(token):
+        """Usuario al que corresponde un token vigente y no usado, o None."""
+        try:
+            uid, huella = serializer.loads(token, salt="restablecer-clave", max_age=RESTABLECER_SEG)
+        except (BadSignature, ValueError, TypeError):          # incluye SignatureExpired
+            return None
+        u = db().execute("SELECT id, email, password_hash FROM usuarios WHERE id = ?", (uid,)).fetchone()
+        if u is None or _huella_clave(u["password_hash"]) != huella:
+            return None
+        return u
+
+    @app.route("/olvide", methods=["GET", "POST"])
+    def olvide():
+        if request.method != "POST":
+            return render_template("olvide.html")
+        email = request.form.get("email", "").strip().lower()
+        clave_rl = f"olvide|{request.remote_addr}"
+        mensaje = "Si ese correo tiene una cuenta, le enviamos un enlace para crear una contraseña nueva (vence en 1 hora)."
+        if bloqueado(clave_rl):
+            flash("Demasiadas solicitudes. Espere unos minutos.", "error")
+            return render_template("olvide.html"), 429
+        app.config["INTENTOS"].setdefault(clave_rl, []).append(time.time())      # cuenta cada solicitud, exista o no
+        u = db().execute("SELECT id, email, password_hash FROM usuarios WHERE email = ?", (email,)).fetchone() \
+            if RE_EMAIL.match(email) else None
+        if u is not None:
+            enlace = _enlace_restablecer(u)
+            app.config["ULTIMO_ENLACE_RESTABLECER"] = enlace if app.config.get("TESTING") else None
+            if not correo.proveedor() or app.config.get("TESTING"):
+                log.warning("Correo no configurado: enlace para restablecer la clave de %s -> %s", email, enlace)
+            else:
+                from scripts.generar_alertas import enviar_email
+                enviar_email("Restablecer su contraseña en Vencimientos",
+                             f"<p>Pidieron restablecer la contraseña de esta cuenta. Si fue usted, cree una nueva "
+                             f"(el enlace vence en 1 hora y sirve una sola vez):</p><p><a href='{enlace}'>{enlace}</a></p>"
+                             f"<p>Si no fue usted, ignore este mensaje: su contraseña no cambia.</p>", [email])
+        flash(mensaje, "ok")                       # misma respuesta exista o no la cuenta
+        return redirect(url_for("login"))
+
+    @app.route("/restablecer/<token>", methods=["GET", "POST"])
+    def restablecer(token):
+        u = _usuario_de_token(token)
+        if u is None:
+            flash("El enlace no es válido o ya venció. Pida uno nuevo.", "error")
+            return redirect(url_for("olvide"))
+        if request.method != "POST":
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD)
+        clave = request.form.get("password", "")
+        if len(clave) < MIN_PASSWORD:
+            flash(f"La contraseña debe tener al menos {MIN_PASSWORD} caracteres.", "error")
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD), 400
+        if clave != request.form.get("password2", ""):
+            flash("Las contraseñas no coinciden.", "error")
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD), 400
+        conn = db()
+        # Poder leer el correo prueba que la direccion es suya: tambien queda verificada.
+        conn.execute("UPDATE usuarios SET password_hash = ?, verificado = 1 WHERE id = ?",
+                     (generate_password_hash(clave), u["id"]))
+        conn.commit()
+        session.clear()                            # cualquier sesion abierta con la clave vieja se cierra
+        log.info("Contraseña restablecida: usuario %s", u["id"])
+        flash("Contraseña actualizada. Ya puede ingresar.", "ok")
+        return redirect(url_for("login"))
 
     @app.post("/logout")
     def logout():
