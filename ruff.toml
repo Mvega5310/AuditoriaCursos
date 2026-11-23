@@ -1,0 +1,10 @@
+# Solo errores reales: sintaxis, nombres sin definir, imports sin usar. El estilo no rompe el CI.
+target-version = "py312"
+extend-exclude = ["legacy_escaneo"]
+
+[lint]
+select = ["E9", "F"]
+
+[lint.per-file-ignores]
+# Las fixtures de pytest se importan y se reciben como argumento: no es una redefinicion accidental
+"tests/*" = ["F811"]

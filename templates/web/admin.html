@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% block titulo %}Administración{% endblock %}
+{% block cuerpo %}<h1>Administración del sistema</h1>
+<p class="mut">Vista de todas las empresas. Solo conteos: aquí no se ven cédulas ni datos de las personas.</p>
+
+<div class="kpis">
+<div class="kpi"><b>{{ activas }}</b>Empresas activas</div>
+<div class="kpi"><b>{{ por_estado.get('enviado', 0) }}</b>Envíos, últimos 7 días</div>
+<div class="kpi"><b class="{{ 'vencido' if por_estado.get('error_envio', 0) + por_estado.get('sin_destinatario', 0) }}">{{ por_estado.get('error_envio', 0) + por_estado.get('sin_destinatario', 0) }}</b>Fallos, últimos 7 días</div>
+<div class="kpi"><b>{{ por_estado.get('sin_registros', 0) }}</b>Sin novedades (no se envió)</div>
+</div>
+
+{% if silenciosas %}<div class="msg error" role="status"><b>No recibirán ningún aviso:</b> {{ silenciosas|join(', ') }}. Sin responsables activos (ni correo de respaldo) o con todos los avisos apagados.</div>{% endif %}
+
+<div class="card"><h2>Configuración del envío</h2>
+<p><b>Proveedor de correo:</b> {{ proveedor }}<br>
+<b>Programador dentro de la app:</b> {{ 'activo' if scheduler else 'apagado (RUN_SCHEDULER)' }} · zona {{ zona }}<br>
+<b>Copia de todos los envíos (ADMIN_EMAIL):</b> {{ admin_email or 'no definida' }}<br>
+<b>Destinatario de respaldo (RRHH_EMAIL):</b> {{ rrhh or 'no definido' }} <span class="mut">— recibe los avisos de una empresa sin responsables.</span></p>
+{% if trabajos %}<p class="mut">Próximas ejecuciones: {% for n, t in trabajos[:5] %}{{ n }} ({{ t.strftime('%d/%m %H:%M') }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}</div>
+
+<div class="card tabla"><h2>Empresas</h2>
+<table><tr><th>Empresa</th><th>Alta</th><th>Personas</th><th>Documentos</th><th>Vencidos</th><th>Recibe los avisos</th><th>Último envío</th></tr>
+{% for e in empresas %}<tr><td><b>{{ e.nombre }}</b><br><span class="mut">{{ e.sector }}{{ '' if e.activa else ' · INACTIVA' }} · {{ e.usuarios }} usuario{{ '' if e.usuarios == 1 else 's' }}</span></td>
+<td>{{ e.alta }}</td><td>{{ e.personas }}</td><td>{{ e.documentos }}</td><td class="{{ 'vencido' if e.vencidos }}">{{ e.vencidos }}</td>
+<td>{% if e.responsables %}{{ e.responsables|join(', ') }}{% else %}<span class="alerta">sin responsables</span>{% endif %}<br>
+<span class="mut">{{ e.avisos|join(', ') if e.avisos else 'avisos apagados' }}</span></td>
+<td>{{ e.ultimo_envio }}{% if e.fallos %}<br><span class="vencido">{{ e.fallos }} fallo{{ '' if e.fallos == 1 else 's' }} esta semana</span>{% endif %}</td></tr>{% endfor %}
+</table></div>
+
+<div class="card tabla"><h2>Últimos envíos (todas las empresas)</h2>
+{% if envios %}<table><tr><th>Fecha</th><th>Empresa</th><th>Aviso</th><th>Enviado a</th><th>Estado</th><th>Detalle</th></tr>
+{% for h in envios %}<tr><td>{{ h.cuando }}</td><td>{{ h.empresa }}</td><td>{{ h.tipo }}</td><td>{{ h.destinatario }}</td>
+<td class="{{ '' if h.estado in ('enviado', 'sin_registros') else 'alerta' }}">{{ {'enviado':'Enviado','error_envio':'Falló el envío','sin_registros':'Sin novedades','sin_destinatario':'Sin destinatarios'}.get(h.estado, h.estado) }}</td>
+<td class="mut">{{ h.detalle }}</td></tr>{% endfor %}</table>
+{% else %}<p class="mut">Todavía no se ha enviado ninguna alerta.</p>{% endif %}</div>
+{% endblock %}

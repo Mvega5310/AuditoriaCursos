@@ -4,7 +4,7 @@ Ejecutar:  python -m pytest -q
 """
 import sqlite3
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import openpyxl

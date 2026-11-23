@@ -18,7 +18,7 @@ import secrets
 import sys
 import tempfile
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
@@ -32,8 +32,8 @@ sys.path.insert(0, str(BASE_DIR / "scripts"))
 import config                                                  # noqa: E402
 import sheets                                                  # noqa: E402
 import correo                                                  # noqa: E402
-from catalogo import CATALOGO                                  # noqa: E402
-from core import conectar, hoy, inicializar_db, normalizar     # noqa: E402
+from core import clasificar, conectar, dias_restantes, hoy, inicializar_db, normalizar   # noqa: E402
+from edicion import validar_documento                          # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ SECTORES = {"salud": "Salud", "alimentos": "Alimentos", "construccion": "Constru
 RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 10
 INTENTOS_MAX, VENTANA_SEG = 5, 15 * 60
+RESTABLECER_SEG = 3600          # vigencia del enlace para restablecer la contrasena
 
 
 mimetypes.add_type("application/manifest+json", ".webmanifest")   # icono al "agregar a la pantalla de inicio"
@@ -59,6 +60,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         APP_URL=config.APP_URL,
         RUN_SCHEDULER=config.RUN_SCHEDULER,
         SHEETS_ENABLED=config.SHEETS_ENABLED,
+        SUPERADMIN_EMAILS=config.SUPERADMIN_EMAILS,
         MAX_CONTENT_LENGTH=config.MAX_UPLOAD_MB * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -98,10 +100,12 @@ def create_app(overrides: dict | None = None) -> Flask:
         uid = session.get("uid")
         if uid:
             g.usuario = db().execute("""
-                SELECT u.id, u.email, u.rol, u.empresa_id, e.nombre AS empresa, e.sector
+                SELECT u.id, u.email, u.rol, u.empresa_id, u.password_hash, e.nombre AS empresa, e.sector
                 FROM usuarios u JOIN empresas e ON e.id = u.empresa_id
                 WHERE u.id = ? AND u.verificado = 1 AND e.activa = 1""", (uid,)).fetchone()
-            if g.usuario is None:
+            # Si la clave cambio despues de abrir esta sesion (p. ej. al restablecerla), la sesion deja de valer
+            if g.usuario is None or session.get("ph") != _huella_clave(g.usuario["password_hash"]):
+                g.usuario = None
                 session.clear()
         if request.method == "POST":
             enviado = request.form.get("csrf", "")
@@ -113,7 +117,15 @@ def create_app(overrides: dict | None = None) -> Flask:
         if "csrf" not in session:
             session["csrf"] = secrets.token_hex(16)
         return {"csrf": session["csrf"], "usuario": g.get("usuario"), "sheets_habilitado": app.config["SHEETS_ENABLED"],
-                "app_url": config.APP_URL}
+                "app_url": config.APP_URL, "es_superadmin": _es_superadmin()}
+
+    def _huella_clave(password_hash: str) -> str:
+        """Identifica la clave vigente sin exponerla: cambia cuando la clave cambia."""
+        return hashlib.sha256(password_hash.encode()).hexdigest()[:16]
+
+    def _es_superadmin() -> bool:
+        u = g.get("usuario")
+        return bool(u) and u["email"].lower() in app.config["SUPERADMIN_EMAILS"]
 
     huellas: dict[str, str] = {}
 
@@ -252,7 +264,79 @@ def create_app(overrides: dict | None = None) -> Flask:
         session.clear()
         session.permanent = True
         session["uid"] = u["id"]
+        session["ph"] = _huella_clave(u["password_hash"])
         return redirect(url_for("panel"))
+
+    # ------------------------------------------------------------ recuperar contrasena
+    def _enlace_restablecer(usuario) -> str:
+        """El token lleva una huella del hash ACTUAL de la clave: en cuanto se cambia, el enlace deja de servir
+        (uso unico) sin tener que guardar tokens en la base."""
+        huella = _huella_clave(usuario["password_hash"])
+        token = serializer.dumps([usuario["id"], huella], salt="restablecer-clave")
+        return f"{app.config['APP_URL']}/restablecer/{token}"
+
+    def _usuario_de_token(token):
+        """Usuario al que corresponde un token vigente y no usado, o None."""
+        try:
+            uid, huella = serializer.loads(token, salt="restablecer-clave", max_age=RESTABLECER_SEG)
+        except (BadSignature, ValueError, TypeError):          # incluye SignatureExpired
+            return None
+        u = db().execute("SELECT id, email, password_hash FROM usuarios WHERE id = ?", (uid,)).fetchone()
+        if u is None or _huella_clave(u["password_hash"]) != huella:
+            return None
+        return u
+
+    @app.route("/olvide", methods=["GET", "POST"])
+    def olvide():
+        if request.method != "POST":
+            return render_template("olvide.html")
+        email = request.form.get("email", "").strip().lower()
+        clave_rl = f"olvide|{request.remote_addr}"
+        mensaje = "Si ese correo tiene una cuenta, le enviamos un enlace para crear una contraseña nueva (vence en 1 hora)."
+        if bloqueado(clave_rl):
+            flash("Demasiadas solicitudes. Espere unos minutos.", "error")
+            return render_template("olvide.html"), 429
+        app.config["INTENTOS"].setdefault(clave_rl, []).append(time.time())      # cuenta cada solicitud, exista o no
+        u = db().execute("SELECT id, email, password_hash FROM usuarios WHERE email = ?", (email,)).fetchone() \
+            if RE_EMAIL.match(email) else None
+        if u is not None:
+            enlace = _enlace_restablecer(u)
+            app.config["ULTIMO_ENLACE_RESTABLECER"] = enlace if app.config.get("TESTING") else None
+            if not correo.proveedor() or app.config.get("TESTING"):
+                log.warning("Correo no configurado: enlace para restablecer la clave de %s -> %s", email, enlace)
+            else:
+                from scripts.generar_alertas import enviar_email
+                enviar_email("Restablecer su contraseña en Vencimientos",
+                             f"<p>Pidieron restablecer la contraseña de esta cuenta. Si fue usted, cree una nueva "
+                             f"(el enlace vence en 1 hora y sirve una sola vez):</p><p><a href='{enlace}'>{enlace}</a></p>"
+                             f"<p>Si no fue usted, ignore este mensaje: su contraseña no cambia.</p>", [email])
+        flash(mensaje, "ok")                       # misma respuesta exista o no la cuenta
+        return redirect(url_for("login"))
+
+    @app.route("/restablecer/<token>", methods=["GET", "POST"])
+    def restablecer(token):
+        u = _usuario_de_token(token)
+        if u is None:
+            flash("El enlace no es válido o ya venció. Pida uno nuevo.", "error")
+            return redirect(url_for("olvide"))
+        if request.method != "POST":
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD)
+        clave = request.form.get("password", "")
+        if len(clave) < MIN_PASSWORD:
+            flash(f"La contraseña debe tener al menos {MIN_PASSWORD} caracteres.", "error")
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD), 400
+        if clave != request.form.get("password2", ""):
+            flash("Las contraseñas no coinciden.", "error")
+            return render_template("restablecer.html", token=token, minimo=MIN_PASSWORD), 400
+        conn = db()
+        # Poder leer el correo prueba que la direccion es suya: tambien queda verificada.
+        conn.execute("UPDATE usuarios SET password_hash = ?, verificado = 1 WHERE id = ?",
+                     (generate_password_hash(clave), u["id"]))
+        conn.commit()
+        session.clear()                            # cualquier sesion abierta con la clave vieja se cierra
+        log.info("Contraseña restablecida: usuario %s", u["id"])
+        flash("Contraseña actualizada. Ya puede ingresar.", "ok")
+        return redirect(url_for("login"))
 
     @app.post("/logout")
     def logout():
@@ -265,7 +349,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         from scripts.generar_alertas import consultar_faltantes, consultar_vencimientos, configuracion_empresa
         eid, conn = g.usuario["empresa_id"], db()
         maximo = max(configuracion_empresa(conn, eid)["ventanas"].values())
-        todos = consultar_vencimientos(conn, eid, max(maximo, 30))
+        todos = consultar_vencimientos(conn, eid, max(maximo, 30), incluir_indefinidos=True)
         faltantes = consultar_faltantes(conn, eid)
         cursos = sorted({r["tipo"] for r in todos} | {c for x in faltantes for c in x["lista"]}, key=str.lower)
         ubicaciones = sorted({r["area"] for r in todos if r["area"]} | {x["area"] for x in faltantes if x["area"]},
@@ -275,26 +359,41 @@ def create_app(overrides: dict | None = None) -> Flask:
         curso = curso if curso in cursos else ""
         ubicacion = ubicacion if ubicacion in ubicaciones else ""
         ventana = request.args.get("ventana", str(maximo))
-        if ventana != "vencidos":
+        if ventana not in ("vencidos", "indefinidos"):
             ventana = str(min(max(int(ventana), 0), 365)) if ventana.isdigit() else str(maximo)
         base = [r for r in todos if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
-        resumen = {"vencidos": sum(1 for r in base if r["dias"] < 0),
-                   **{f"d{n}": sum(1 for r in base if 0 <= r["dias"] <= n) for n in (7, 15, 30)},
-                   "todos": sum(1 for r in base if r["dias"] <= maximo)}
+        # Los de vigencia indefinida (pago unico) se ven, pero no cuentan como vencidos ni como por vencer:
+        # su fecha impresa es administrativa y no hay nada que renovar.
+        vence = [r for r in base if r["clase"] != "indefinido"]
+        resumen = {"vencidos": sum(1 for r in vence if r["dias"] < 0),
+                   **{f"d{n}": sum(1 for r in vence if 0 <= r["dias"] <= n) for n in (7, 15, 30)},
+                   "todos": sum(1 for r in vence if r["dias"] <= maximo),
+                   "indefinidos": len(base) - len(vence)}
         if ventana == "vencidos":
-            registros, titulo = [r for r in base if r["dias"] < 0], "Vencidos"
+            registros, titulo = [r for r in vence if r["dias"] < 0], "Vencidos"
+        elif ventana == "indefinidos":
+            registros = [r for r in base if r["clase"] == "indefinido"]
+            titulo = "Vigencia indefinida — no se renuevan"
         else:
             n = int(ventana)
             if n > max(maximo, 30):
-                base = [r for r in consultar_vencimientos(conn, eid, n)
+                base = [r for r in consultar_vencimientos(conn, eid, n, incluir_indefinidos=True)
                         if (not curso or r["tipo"] == curso) and (not ubicacion or r["area"] == ubicacion)]
             registros = [r for r in base if r["dias"] <= n]
-            v = sum(1 for r in registros if r["dias"] < 0)
-            titulo = f"Vencidos ({v}) y por vencer en {n} días ({len(registros) - v})"
+            ind = sum(1 for r in registros if r["clase"] == "indefinido")
+            v = sum(1 for r in registros if r["clase"] != "indefinido" and r["dias"] < 0)
+            titulo = f"Vencidos ({v}) y por vencer en {n} días ({len(registros) - v - ind})"
+            if ind:
+                titulo += f" · {ind} de vigencia indefinida"
         faltantes = [x for x in faltantes if (not curso or curso in x["lista"]) and (not ubicacion or x["area"] == ubicacion)]
+        # Los exigidos sin registrar no tienen fecha, asi que no entran en los KPI de vencimientos, pero SI viajan en
+        # los avisos: tienen su propio contador para que el panel nunca marque ceros mientras salen correos.
+        resumen["sin_registrar"] = sum(x["cantidad"] for x in faltantes)
         opciones = [("vencidos", "Solo vencidos")] + [(str(n), f"Vencidos + próximos {n} días")
                                                       for n in sorted({7, 15, 30, maximo})]
-        if ventana not in dict(opciones):
+        if resumen["indefinidos"]:
+            opciones.append(("indefinidos", "Solo vigencia indefinida"))
+        if ventana.isdigit() and ventana not in dict(opciones):
             opciones.append((ventana, f"Vencidos + próximos {ventana} días"))
         filtros = {"ventana": ventana, "curso": curso, "ubicacion": ubicacion}
         return dict(registros=registros, titulo=titulo, resumen=resumen, faltantes=faltantes, cursos=cursos,
@@ -330,7 +429,7 @@ def create_app(overrides: dict | None = None) -> Flask:
                                  (g.usuario["empresa_id"],)).fetchone()[0]
         return render_template("panel.html", registros=registros, pag_v=pag_v, faltantes=faltantes, pag_f=pag_f,
                                # la lista de faltantes empieza plegada; se abre si el usuario esta paginandola
-                               abrir_faltantes="pf" in request.args,
+                               abrir_faltantes="pf" in request.args or (not registros and pag_f["total"] > 0),
                                pf_actual=pag_f["pagina"] if "pf" in request.args else None,
                                empleados=empleados, hoy=hoy().strftime("%d/%m/%Y"), **datos)
 
@@ -472,7 +571,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         html = renderizar_html(registros, tipo, g.usuario["empresa"], faltantes, dias)
         destinatarios = [r["email"] for r in conn.execute(
             "SELECT email FROM responsables WHERE empresa_id = ? AND activo = 1 ORDER BY id", (eid,))]
-        historial = conn.execute("""SELECT fecha_envio, tipo_alerta, documentos_notificados, destinatario, estado
+        historial = conn.execute("""SELECT fecha_envio, tipo_alerta, documentos_notificados, destinatario, estado, detalle
                                     FROM log_alertas WHERE empresa_id = ? ORDER BY id DESC LIMIT 15""", (eid,)).fetchall()
         return render_template("alertas.html", tipo=tipo, tipos=tipos, html=html, destinatarios=destinatarios,
                                n_registros=len(registros), n_faltantes=len(faltantes), historial=historial,
@@ -617,6 +716,265 @@ def create_app(overrides: dict | None = None) -> Flask:
         conn.commit()
         return redirect(url_for("responsables"))
 
+    # ------------------------------------------------------------ documentos: ver, agregar, editar, eliminar
+    def _fecha_visible(iso):
+        return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y") if iso else ""
+
+    def _titular(d):
+        if d["cedula"] is None:
+            return "EMPRESA"
+        return f"{d['apellido']}, {d['nombre']}" if d["apellido"] else d["nombre"]
+
+    def _estado_documento(d) -> tuple[str, str]:
+        """(texto, clase css) del documento tal como lo ve la lista."""
+        if d["no_aplica"]:
+            return "No aplica", "mut"
+        if d["vigencia_indefinida"]:
+            return "INDEFINIDO", "indefinido"
+        if not d["fecha_vencimiento"]:
+            return "Sin vencimiento", "mut"
+        dias = dias_restantes(d["fecha_vencimiento"])
+        clase, etiqueta = clasificar(dias)
+        return f"{etiqueta} ({'hace ' + str(-dias) if dias < 0 else dias} d)", clase
+
+    def _documento_de_la_empresa(did):
+        """El documento SOLO si es de la empresa del usuario. Si no, 404: no se revela que existe en otra."""
+        d = db().execute("""
+            SELECT d.id, d.empleado_id, d.referencia, d.entidad_emisora, d.fecha_emision, d.fecha_vencimiento,
+                   d.no_aplica, d.vigencia_indefinida, d.avisar_dias, d.observaciones,
+                   t.nombre AS documento, e.cedula, e.nombre, e.apellido, e.cargo, e.area, e.activo
+            FROM documentos d JOIN tipos_documento t ON t.id = d.tipo_id
+            LEFT JOIN empleados e ON e.id = d.empleado_id
+            WHERE d.id = ? AND d.empresa_id = ?""", (did, g.usuario["empresa_id"])).fetchone()
+        if d is None:
+            abort(404)
+        return d
+
+    @app.get("/documentos")
+    @login_requerido
+    def documentos():
+        q = request.args.get("q", "").strip()[:80]
+        buscar = normalizar(q)
+        filas = db().execute("""
+            SELECT d.id, d.referencia, d.fecha_vencimiento, d.no_aplica, d.vigencia_indefinida,
+                   t.nombre AS documento, e.cedula, e.nombre, e.apellido, e.cargo, e.area, e.activo
+            FROM documentos d JOIN tipos_documento t ON t.id = d.tipo_id
+            LEFT JOIN empleados e ON e.id = d.empleado_id
+            WHERE d.empresa_id = ? ORDER BY e.apellido, e.nombre, t.nombre""", (g.usuario["empresa_id"],)).fetchall()
+        items = []
+        for d in filas:
+            titular = _titular(d)
+            if buscar and buscar not in normalizar(f"{titular} {d['cedula'] or ''} {d['documento']} {d['referencia']}"):
+                continue
+            estado, clase = _estado_documento(d)
+            items.append({"id": d["id"], "titular": titular, "cedula": d["cedula"] or "—", "documento": d["documento"],
+                          "referencia": d["referencia"], "vence": _fecha_visible(d["fecha_vencimiento"]) or "—",
+                          "estado": estado, "clase": clase, "retirado": d["cedula"] is not None and not d["activo"]})
+        visibles, pag = _paginar(items, "pagina")
+        return render_template("documentos.html", items=visibles, pag=pag, q=q, total=len(filas))
+
+    @app.route("/documentos/nuevo", methods=["GET", "POST"])
+    @login_requerido
+    def documento_nuevo():
+        from agregar_documento import agregar
+        eid, conn = g.usuario["empresa_id"], db()
+        personas = conn.execute("""SELECT cedula, nombre, apellido, cargo, area FROM empleados
+                                   WHERE empresa_id = ? AND activo = 1 ORDER BY apellido, nombre""", (eid,)).fetchall()
+        sugeridos = [r["nombre"] for r in conn.execute(
+            "SELECT DISTINCT nombre FROM tipos_documento WHERE sector IN (?, 'general') ORDER BY nombre",
+            (g.usuario["sector"],))]
+
+        def formulario(estado=200, **extra):
+            return render_template("documento_form.html", nuevo=True, personas=personas, sugeridos=sugeridos,
+                                   v=extra.get("v", {}), **{k: x for k, x in extra.items() if k != "v"}), estado
+
+        if request.method != "POST":
+            return formulario()
+        v = {k: request.form.get(k, "").strip() for k in ("cedula", "documento", "referencia", "fecha_emision",
+                                                           "fecha_vencimiento", "avisar_dias", "entidad", "observaciones")}
+        v["vigencia_indefinida"] = bool(request.form.get("vigencia_indefinida"))
+        valores, errores = validar_documento(request.form)
+        if not v["documento"]:
+            errores.append("Escriba el nombre del documento o curso.")
+        persona = None
+        if v["cedula"]:
+            persona = next((p for p in personas if p["cedula"] == v["cedula"]), None)   # solo personas de ESTA empresa
+            if persona is None:
+                errores.append("Elija una persona de la lista.")
+        if errores:
+            for e in errores:
+                flash(e, "error")
+            return formulario(400, v=v)
+        campos = {"empresa": g.usuario["empresa"], "documento": v["documento"][:200], "referencia": v["referencia"][:100],
+                  "fecha_emision": v["fecha_emision"], "fecha_vencimiento": v["fecha_vencimiento"],
+                  "avisar_dias": v["avisar_dias"], "entidad": valores["entidad"], "observaciones": valores["observaciones"],
+                  "vigencia_indefinida": "indefinida" if valores["vigencia_indefinida"] else ""}
+        if persona:
+            campos.update(cedula=persona["cedula"], nombre=persona["nombre"], apellido=persona["apellido"],
+                          cargo=persona["cargo"], area=persona["area"])
+        res = agregar(campos, db_path=app.config["DB_PATH"], empresa_defecto=g.usuario["empresa"])
+        if res["errores"]:
+            for e in res["errores"]:
+                flash(e, "error")
+            return formulario(400, v=v)
+        flash("Documento actualizado: ya existía con esa referencia; la versión anterior quedó en el historial."
+              if res["actualizados"] else "Documento agregado.", "ok")
+        return redirect(url_for("documentos", q=v["documento"]))
+
+    @app.route("/documentos/<int:did>", methods=["GET", "POST"])
+    @login_requerido
+    def documento_editar(did):
+        d = _documento_de_la_empresa(did)
+        if request.method == "POST":
+            valores, errores = validar_documento(request.form)
+            if errores:
+                for e in errores:
+                    flash(e, "error")
+                v = {**{k: request.form.get(k, "").strip() for k in ("fecha_emision", "fecha_vencimiento", "avisar_dias",
+                                                                       "entidad", "observaciones")},
+                     "no_aplica": bool(request.form.get("no_aplica")),
+                     "vigencia_indefinida": bool(request.form.get("vigencia_indefinida"))}
+                return render_template("documento_form.html", nuevo=False, d=d, titular=_titular(d), v=v, historial=[]), 400
+            conn = db()
+            # Si cambia el vencimiento, el disparador de la base guarda la version anterior en el historial
+            conn.execute("""UPDATE documentos SET fecha_emision = ?, fecha_vencimiento = ?, no_aplica = ?,
+                                vigencia_indefinida = ?, avisar_dias = ?, entidad_emisora = ?, observaciones = ?,
+                                actualizado_en = ?
+                            WHERE id = ? AND empresa_id = ?""",
+                         (valores["fecha_emision"], valores["fecha_vencimiento"], valores["no_aplica"],
+                          valores["vigencia_indefinida"], valores["avisar_dias"], valores["entidad"],
+                          valores["observaciones"], hoy().isoformat(), did, g.usuario["empresa_id"]))
+            conn.commit()
+            flash("Documento actualizado.", "ok")
+            return redirect(url_for("documentos", q=d["cedula"] or d["documento"]))
+        v = {"fecha_emision": _fecha_visible(d["fecha_emision"]), "fecha_vencimiento": _fecha_visible(d["fecha_vencimiento"]),
+             "avisar_dias": "" if d["avisar_dias"] is None else str(d["avisar_dias"]), "entidad": d["entidad_emisora"] or "",
+             "observaciones": d["observaciones"] or "", "no_aplica": bool(d["no_aplica"]),
+             "vigencia_indefinida": bool(d["vigencia_indefinida"])}
+        historial = [{"emision": _fecha_visible(h["fecha_emision"]), "vence": _fecha_visible(h["fecha_vencimiento"]),
+                      "cuando": (h["registrado_en"] or "")[:10]}
+                     for h in db().execute("""SELECT fecha_emision, fecha_vencimiento, registrado_en
+                                              FROM documentos_historial WHERE documento_id = ? ORDER BY id DESC""", (did,))]
+        return render_template("documento_form.html", nuevo=False, d=d, titular=_titular(d), v=v, historial=historial)
+
+    @app.post("/documentos/<int:did>/eliminar")
+    @login_requerido
+    def documento_eliminar(did):
+        if g.usuario["rol"] != "admin":
+            abort(403)
+        d = _documento_de_la_empresa(did)
+        conn = db()
+        conn.execute("DELETE FROM documentos_historial WHERE documento_id = ?", (did,))
+        conn.execute("DELETE FROM documentos WHERE id = ? AND empresa_id = ?", (did, g.usuario["empresa_id"]))
+        conn.commit()
+        log.warning("Documento eliminado: empresa %s, usuario %s, documento %s (%s)",
+                    g.usuario["empresa_id"], g.usuario["id"], did, d["documento"])
+        flash("Documento eliminado.", "ok")
+        return redirect(url_for("documentos"))
+
+    @app.post("/documentos/<int:did>/persona")
+    @login_requerido
+    def documento_persona(did):
+        """Marca a la persona dueña del documento como retirada (deja de recibir avisos) o la reactiva."""
+        d = _documento_de_la_empresa(did)
+        if d["empleado_id"] is None:
+            abort(400, "Este documento es de la empresa, no de una persona.")
+        activo = 0 if request.form.get("accion") == "retirar" else 1
+        conn = db()
+        conn.execute("UPDATE empleados SET activo = ? WHERE id = ? AND empresa_id = ?",
+                     (activo, d["empleado_id"], g.usuario["empresa_id"]))
+        conn.commit()
+        flash("Persona marcada como retirada: ya no genera avisos." if not activo else "Persona reactivada.", "ok")
+        return redirect(url_for("documento_editar", did=did))
+
+    # ------------------------------------------------------------ administrador del sistema (cruza empresas)
+    @app.get("/admin")
+    @login_requerido
+    def admin():
+        """Todas las empresas, quien recibe sus avisos y que se envio. SOLO cuentas de SUPERADMIN_EMAILS; para el resto
+        responde 404 (no revela que existe). Muestra conteos, nunca cedulas ni datos de empleados."""
+        if not _es_superadmin():
+            abort(404)
+        conn = db()
+
+        def por_empresa(sql, params=()):
+            return {r[0]: r[1] for r in conn.execute(sql, params)}
+
+        usuarios = por_empresa("SELECT empresa_id, COUNT(*) FROM usuarios GROUP BY empresa_id")
+        personas = por_empresa("SELECT empresa_id, COUNT(*) FROM empleados WHERE activo = 1 GROUP BY empresa_id")
+        documentos_n = por_empresa("SELECT empresa_id, COUNT(*) FROM documentos GROUP BY empresa_id")
+        vencidos = por_empresa("""SELECT d.empresa_id, COUNT(*) FROM documentos d LEFT JOIN empleados e ON e.id = d.empleado_id
+                                  WHERE d.fecha_vencimiento IS NOT NULL AND d.fecha_vencimiento < ? AND d.vigencia_indefinida = 0
+                                    AND d.no_aplica = 0 AND (d.empleado_id IS NULL OR e.activo = 1)
+                                  GROUP BY d.empresa_id""", (hoy().isoformat(),))
+        ultimo_envio = por_empresa("SELECT empresa_id, MAX(fecha_envio) FROM log_alertas WHERE estado = 'enviado' GROUP BY empresa_id")
+        desde = (datetime.now() - timedelta(days=7)).isoformat(timespec="seconds")
+        fallos = por_empresa("""SELECT empresa_id, COUNT(*) FROM log_alertas
+                                WHERE estado IN ('error_envio', 'sin_destinatario') AND fecha_envio >= ? GROUP BY empresa_id""", (desde,))
+        resp: dict[int, list[str]] = {}
+        for r in conn.execute("SELECT empresa_id, email FROM responsables WHERE activo = 1 ORDER BY id"):
+            resp.setdefault(r["empresa_id"], []).append(r["email"])
+
+        empresas = []
+        for e in conn.execute("""SELECT id, nombre, sector, activa, consentimiento_en, alertas_activas
+                                 FROM empresas ORDER BY nombre"""):
+            activas = [x for x in (e["alertas_activas"] or "").split(",") if x]
+            empresas.append({
+                "id": e["id"], "nombre": e["nombre"], "sector": e["sector"] or "—", "activa": bool(e["activa"]),
+                "alta": (e["consentimiento_en"] or "")[:10] or "—", "usuarios": usuarios.get(e["id"], 0),
+                "personas": personas.get(e["id"], 0), "documentos": documentos_n.get(e["id"], 0),
+                "vencidos": vencidos.get(e["id"], 0), "responsables": resp.get(e["id"], []), "avisos": activas,
+                "ultimo_envio": (ultimo_envio.get(e["id"]) or "")[:16].replace("T", " ") or "nunca",
+                "fallos": fallos.get(e["id"], 0),
+                # Una empresa que no recibira nada: sin responsables (ni respaldo) o sin avisos activos
+                "silenciosa": e["activa"] and (not activas or not (resp.get(e["id"]) or config.RRHH_EMAIL))})
+
+        nombres = {e["id"]: e["nombre"] for e in empresas}
+        envios = [{"cuando": (r["fecha_envio"] or "")[:16].replace("T", " "), "empresa": nombres.get(r["empresa_id"], "—"),
+                   "tipo": r["tipo_alerta"], "estado": r["estado"], "destinatario": r["destinatario"] or "—",
+                   "detalle": r["detalle"] or ""}
+                  for r in conn.execute("""SELECT fecha_envio, empresa_id, tipo_alerta, estado, destinatario, detalle
+                                           FROM log_alertas ORDER BY id DESC LIMIT 40""")]
+        por_estado = por_empresa("SELECT estado, COUNT(*) FROM log_alertas WHERE fecha_envio >= ? GROUP BY estado", (desde,))
+        sch = app.extensions.get("scheduler")
+        trabajos = sorted(((j.name, j.next_run_time) for j in sch.get_jobs() if j.next_run_time), key=lambda x: x[1]) if sch else []
+        return render_template("admin.html", empresas=empresas, envios=envios, por_estado=por_estado,
+                               activas=sum(1 for e in empresas if e["activa"]), silenciosas=[e["nombre"] for e in empresas if e["silenciosa"]],
+                               scheduler=bool(sch), trabajos=trabajos, proveedor=correo.proveedor() or "ninguno",
+                               rrhh=config.RRHH_EMAIL, admin_email=config.ADMIN_EMAIL, zona=config.ZONA_HORARIA)
+
+    # ------------------------------------------------------------ baja de avisos (sin iniciar sesion)
+    def _responsable_de_token(token):
+        """Fila del responsable que firma el token, o None. El enlace NO vence: una baja debe seguir
+        funcionando meses despues de que salio el correo."""
+        try:
+            rid = serializer.loads(token, salt="baja-avisos")
+        except BadSignature:                      # incluye SignatureExpired
+            return None
+        return db().execute("""SELECT r.id, r.email, r.activo, e.nombre AS empresa
+                               FROM responsables r JOIN empresas e ON e.id = r.empresa_id
+                               WHERE r.id = ?""", (rid,)).fetchone()
+
+    @app.get("/baja/<token>")
+    def baja(token):
+        """Pagina de confirmacion. El GET NO da de baja: el prefetch de Gmail y los escaneres
+        corporativos abren los enlaces solos y darian de baja a quien no lo pidio."""
+        r = _responsable_de_token(token)
+        if r is None:
+            abort(404)
+        return render_template("baja.html", r=r, hecho=not r["activo"])
+
+    @app.post("/baja/<token>")
+    def baja_confirmar(token):
+        r = _responsable_de_token(token)
+        if r is None:
+            abort(404)
+        conn = db()
+        conn.execute("UPDATE responsables SET activo = 0 WHERE id = ?", (r["id"],))
+        conn.commit()
+        log.info("Baja de avisos: responsable %s de la empresa %s", r["id"], r["empresa"])
+        return render_template("baja.html", r=r, hecho=True)
+
     @app.errorhandler(400)
     @app.errorhandler(404)
     @app.errorhandler(413)
@@ -631,6 +989,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         sch = BackgroundScheduler(timezone=config.ZONA_HORARIA)
         registrar_jobs(sch)
         sch.start()
+        app.extensions["scheduler"] = sch
         log.info("Alertas programadas activas dentro de la app web.")
 
     return app

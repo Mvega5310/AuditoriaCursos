@@ -26,6 +26,10 @@ python scheduler.py                                     # alertas automáticas
 
 Pruebas: `pip install -r requirements-dev.txt` y `python -m pytest -q`.
 
+**CI** (`.github/workflows/ci.yml`): en cada PR y en `main` corre las pruebas sobre SQLite y sobre Postgres 16, `ruff` (solo errores reales,
+ver `ruff.toml`) y `pip-audit` (falla si una dependencia fijada tiene una vulnerabilidad conocida). Dependabot propone las actualizaciones cada semana.
+Se usa Python 3.12, la versión del `Dockerfile`: `pandas==2.2.2` no publica ruedas para 3.13.
+
 ## Si ya usaba la versión anterior (una sola empresa)
 
 ```bash
@@ -135,6 +139,58 @@ python scripts/agregar_documento.py listar --sector salud
 - `--avisar-dias N` (o la columna **Avisar Dias** del Excel): el documento aparece en **todas** las alertas (diaria, semanal, etc.) desde N días antes de vencer, además de las ventanas normales.
 - Sin fecha de vencimiento el documento se guarda, pero no genera alertas.
 
+## Administración del sistema
+
+`/admin` muestra, para quien opera el servicio, **todas las empresas**: cuántas personas y documentos tienen, cuántos vencidos, **quién recibe sus
+avisos**, cuándo fue el último envío y cuántos fallos hubo esta semana; los últimos 40 envíos de todas las empresas; el proveedor de correo, el
+estado del programador, y a dónde van `ADMIN_EMAIL` (copia de todos los envíos) y `RRHH_EMAIL` (respaldo de empresas sin responsables).
+Avisa de las empresas que **no recibirán ningún aviso** (sin responsables ni respaldo, o con todos los avisos apagados).
+
+Es la única pantalla que cruza empresas, así que solo la ven las cuentas listadas en la variable `SUPERADMIN_EMAILS` (correos separados por
+coma, el correo con el que ingresa a la app). Sin la variable, nadie la ve; para cualquier otra cuenta responde 404 y ni siquiera aparece en el
+menú. Solo muestra conteos y correos de responsables: nunca cédulas ni datos de las personas.
+
+## Documentos: ver, agregar, editar y eliminar desde la web
+
+El menú **Documentos** lista todo lo de la empresa (con búsqueda por nombre, cédula o documento) y permite, sin rehacer el Excel:
+
+- **Editar** fechas, entidad, observaciones y «Avisar desde»; marcar **vigencia indefinida** o **no aplica**. Si cambia el vencimiento
+  (una renovación) la versión anterior queda en el historial, visible en la misma pantalla.
+- **Agregar** un documento a una persona existente o a la empresa. Si ya existe con esa referencia, lo actualiza en vez de duplicarlo.
+- **Marcar a una persona como retirada** (deja de generar avisos y de salir como faltante) o reactivarla.
+- **Eliminar** (solo administradores; borra también sus versiones anteriores).
+
+Las fechas pasan por las mismas reglas del importador: dd/mm/aaaa, vencimiento no anterior a la emisión y rechazo de vencimientos de hace más
+de 5 años como error de digitación (salvo vigencia indefinida). Cada documento se busca por su id **y** por la empresa del usuario: uno de
+otra empresa responde 404, igual que si no existiera.
+
+## Cursos de vigencia indefinida (pago único)
+
+Un mismo curso puede venderse en dos modalidades: **renovable** (más barata, vence y hay que repetirla) o de
+**pago único** (más cara, no se renueva). Algunas entidades imprimen igual una fecha de vencimiento en el
+certificado de pago único, y ese documento aparecía como `VENCIDO` para siempre.
+
+Como lo que decide es **lo que pagó cada persona**, la marca es **por documento**, nunca por nombre de curso:
+marcarla por curso apagaría las alertas de la mayoría, que sí tiene la modalidad renovable y sí debe renovar.
+
+Se marca desde el propio Excel, con `INDEFINIDO` (también `INDEFINIDA`, `INDEF`, `PERMANENTE`, `VITALICIO`):
+
+| Celda | Resultado |
+|---|---|
+| `INDEFINIDO` | No se renueva, sin fecha |
+| `INDEF: 30/06/2024` | No se renueva y **se conserva** la fecha impresa del certificado |
+| `30/06/2024` | Normal: vence y genera alertas |
+
+En el formato de lista también sirve una columna **`Vigencia`** (o `Modalidad`) con el valor `indefinida`.
+
+Esos documentos **nunca generan alertas**, cuentan como presentes para los requisitos por cargo, y en el panel
+aparecen con estado `INDEFINIDO` (en su propio KPI, fuera de «Vencidos»), de modo que en una auditoría se ve
+el certificado, su fecha impresa y el motivo por el que no se reporta como vencido.
+
+> **Ojo:** es una decisión de cumplimiento. Hay cursos cuya renovación es obligatoria por norma
+> independientemente de lo que cobre la entidad. Marcar como indefinido un curso que la ley exige renovar
+> hace que el sistema certifique un cumplimiento que no existe. Confírmelo contra la norma antes de marcarlo.
+
 ## Estados
 
 `VENCIDO` (< 0 días) · `CRITICO` (0–7) · `ALERTA` (8–15) · `PROXIMO` (16–30) · `NORMAL` (> 30). Los umbrales se ajustan en `config.py`.
@@ -151,6 +207,20 @@ Así ningún documento queda entre dos correos sin margen para renovarlo.
 | Semanal | lunes 07:30 | 7 + 30 = 37 días |
 | Quincenal | días 1 y 15, 08:00 | 15 + 30 = 45 días |
 | Mensual | día 1, 08:30 | 30 + 30 = 60 días |
+
+### Darse de baja
+
+Cada aviso lleva al pie un enlace **«darse de baja»** firmado para ese destinatario en particular, así que
+funciona sin iniciar sesión y da de baja **solo esa dirección**: los demás responsables de la empresa siguen
+recibiendo los avisos. Por eso se envía **un correo por responsable** y no uno con todos en el *Para*
+(que además dejaba las direcciones de unos a la vista de los otros).
+
+El enlace no vence, y abrirlo no da de baja: muestra una página de confirmación, porque el *prefetch* de Gmail
+y los escáneres corporativos abren los enlaces por su cuenta. La baja se consuma al pulsar el botón.
+El destinatario de respaldo (`RRHH_EMAIL`) no lleva enlace, porque no corresponde a ninguna fila de `responsables`.
+
+Para volver a activar una dirección: menú **Responsables**, agregarla de nuevo. Para que una empresa deje de
+recibir **todo**, menú **Avisos**, desmarcando los avisos (eso no depende de los responsables).
 
 Cada empresa elige en la web (menú **Avisos**) su anticipación y qué avisos recibe. El **Panel** filtra por
 vencidos / 7 / 15 / 30 días, curso y ubicación, y descarga la lista filtrada en Excel. Al importar (o validar) se muestra
@@ -184,6 +254,7 @@ scripts/migrar_v1.py        migra la base anterior
 scripts/generar_alertas.py  alertas por empresa (--dry-run)
 scheduler.py         programa las alertas (Lun-Vie 07:00, etc.)
 templates/alerta_email.html
+edicion.py           validación de los formularios de documentos
 tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py, tests/test_sheets.py
 ```
 
@@ -200,6 +271,13 @@ python web.py                            # http://localhost:8000
 
 Para dar acceso a una empresa que ya existe en la base (por ejemplo, la migrada desde v1):
 `python scripts/crear_usuario.py --empresa "Hospital Universitario" --email admin@hospital.com`
+
+### Recuperar la contraseña
+
+En el login, «¿Olvidó su contraseña?» envía un enlace al correo de la cuenta. El enlace vence en **1 hora** y sirve **una sola vez**
+(lleva una huella de la clave vigente: al cambiarla deja de valer, sin guardar tokens en la base). La respuesta es la misma exista o no la
+cuenta, para no revelar qué correos están registrados, y las solicitudes se limitan por IP. Al restablecer, las sesiones abiertas en otros
+dispositivos con la clave anterior se cierran, y el correo queda verificado (poder leerlo prueba que es suyo).
 
 ## Base de datos: SQLite o Postgres
 

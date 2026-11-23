@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% block titulo %}{{ 'Agregar documento' if nuevo else 'Editar documento' }}{% endblock %}
+{% block cuerpo %}<h1>{{ 'Agregar documento' if nuevo else 'Editar documento' }}</h1>
+<div class="card">
+{% if not nuevo %}<p><b>{{ d.documento }}</b>{% if d.referencia %} <span class="mut">({{ d.referencia }})</span>{% endif %}<br>
+<span class="mut">{{ titular }}{% if d.cedula %} · cédula {{ d.cedula }}{% endif %}{% if d.area or d.cargo %} · {{ [d.area, d.cargo]|select|join(' / ') }}{% endif %}{% if d.cedula and not d.activo %} · <b>retirado</b>{% endif %}</span></p>{% endif %}
+<form method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
+{% if nuevo %}
+  <label for="cedula">Titular</label><select id="cedula" name="cedula">
+    <option value="">La empresa (documento de la empresa)</option>
+    {% for p in personas %}<option value="{{ p.cedula }}" {{ 'selected' if v.cedula == p.cedula }}>{{ p.apellido }}{{ ', ' if p.apellido }}{{ p.nombre }} — {{ p.cedula }}</option>{% endfor %}</select>
+  <label for="documento">Documento o curso</label><input id="documento" name="documento" list="tipos" required maxlength="200" value="{{ v.documento }}">
+  <datalist id="tipos">{% for s in sugeridos %}<option value="{{ s }}">{% endfor %}</datalist>
+  <label for="referencia">Referencia (número de certificado, póliza…) — opcional</label><input id="referencia" name="referencia" maxlength="100" value="{{ v.referencia }}">
+{% endif %}
+  <label for="fecha_emision">Fecha de emisión</label><input id="fecha_emision" name="fecha_emision" placeholder="dd/mm/aaaa" maxlength="20" value="{{ v.fecha_emision }}">
+  <label for="fecha_vencimiento">Fecha de vencimiento</label><input id="fecha_vencimiento" name="fecha_vencimiento" placeholder="dd/mm/aaaa" maxlength="20" value="{{ v.fecha_vencimiento }}">
+  <label><input type="checkbox" name="vigencia_indefinida" value="1" {{ 'checked' if v.vigencia_indefinida }}> Vigencia indefinida (pago único: la fecha impresa no genera alertas)</label>
+  {% if not nuevo %}<label><input type="checkbox" name="no_aplica" value="1" {{ 'checked' if v.no_aplica }}> No aplica a esta persona (cuenta como cumplido; borra las fechas)</label>{% endif %}
+  <label for="avisar_dias">Avisar desde (días antes de vencer) — opcional</label><input id="avisar_dias" name="avisar_dias" inputmode="numeric" maxlength="3" value="{{ v.avisar_dias }}">
+  <label for="entidad">Entidad que certifica — opcional</label><input id="entidad" name="entidad" maxlength="200" value="{{ v.entidad }}">
+  <label for="observaciones">Observaciones — opcional</label><textarea id="observaciones" name="observaciones" maxlength="1000" rows="3">{{ v.observaciones }}</textarea>
+  <button>{{ 'Agregar' if nuevo else 'Guardar cambios' }}</button> <a href="{{ url_for('documentos') }}">Cancelar</a>
+</form></div>
+
+{% if not nuevo %}
+{% if historial %}<div class="card tabla"><h2>Versiones anteriores</h2>
+<p class="mut">Al renovar (cambiar el vencimiento) se conserva la versión anterior.</p>
+<table><tr><th>Emisión</th><th>Vencía</th><th>Reemplazada el</th></tr>
+{% for h in historial %}<tr><td>{{ h.emision or '—' }}</td><td>{{ h.vence or '—' }}</td><td>{{ h.cuando }}</td></tr>{% endfor %}</table></div>{% endif %}
+
+{% if d.empleado_id %}<div class="card"><h2>Persona</h2>
+<form method="post" action="{{ url_for('documento_persona', did=d.id) }}"><input type="hidden" name="csrf" value="{{ csrf }}">
+{% if d.activo %}<p class="mut">Si la persona ya no trabaja en la empresa, márquela como retirada: deja de generar avisos y de aparecer como faltante.</p>
+<button class="sec" name="accion" value="retirar">Marcar como retirada</button>
+{% else %}<p class="mut">Esta persona está retirada: sus documentos no generan avisos.</p>
+<button class="sec" name="accion" value="reactivar">Reactivar</button>{% endif %}</form></div>{% endif %}
+
+{% if usuario.rol == 'admin' %}<div class="card"><h2>Eliminar</h2>
+<p class="mut">Borra este documento y sus versiones anteriores. No se puede deshacer. Si solo cambió la fecha, edítela en vez de eliminarlo.</p>
+<form method="post" action="{{ url_for('documento_eliminar', did=d.id) }}" onsubmit="return confirm('¿Eliminar este documento? No se puede deshacer.')">
+<input type="hidden" name="csrf" value="{{ csrf }}"><button class="sec">Eliminar documento</button></form></div>{% endif %}
+{% endif %}
+{% endblock %}

@@ -27,3 +27,7 @@ datos_prueba.xlsx
 *service-account*.json
 *service_account*.json
 credenciales*.json
+
+# Cobertura
+.coverage
+htmlcov/

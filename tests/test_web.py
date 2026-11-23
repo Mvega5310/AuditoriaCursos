@@ -3,7 +3,6 @@ Pruebas de la app web: registro, verificacion, login y, sobre todo, AISLAMIENTO 
 Ejecutar:  python -m pytest -q
 """
 import io
-import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path

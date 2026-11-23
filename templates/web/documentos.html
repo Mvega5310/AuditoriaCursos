@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block titulo %}Documentos{% endblock %}
+{% block cuerpo %}<h1>Documentos</h1>
+<p class="mut">{{ total }} documento{{ '' if total == 1 else 's' }} en total. Corrija una fecha, renueve un certificado, marque un curso como indefinido o retire a una persona.</p>
+<div class="card"><form method="get" class="filtros">
+  <div><label for="q">Buscar</label><input id="q" name="q" value="{{ q }}" placeholder="Nombre, cédula o documento" maxlength="80"></div>
+  <div><button>Buscar</button></div>
+  <div><a class="btn" href="{{ url_for('documento_nuevo') }}">+ Agregar documento</a></div>
+</form></div>
+<div class="card tabla">
+{% if items %}
+<table>
+<tr><th>Titular</th><th>Cédula</th><th>Documento</th><th>Vence</th><th>Estado</th><th></th></tr>
+{% for r in items %}<tr><td>{{ r.titular }}{% if r.retirado %} <span class="mut">(retirado)</span>{% endif %}</td><td>{{ r.cedula }}</td>
+<td>{{ r.documento }}{% if r.referencia %} <span class="mut">({{ r.referencia }})</span>{% endif %}</td><td>{{ r.vence }}</td>
+<td class="{{ r.clase }}">{{ r.estado }}</td><td><a href="{{ url_for('documento_editar', did=r.id) }}">Editar</a></td></tr>{% endfor %}
+</table>
+{% if pag.paginas > 1 %}<nav class="paginador" aria-label="Páginas de la lista"><span class="mut">Mostrando {{ pag.desde }}–{{ pag.hasta }} de {{ pag.total }}</span>
+<span class="paginas">
+{% if pag.pagina > 1 %}<a href="{{ url_for('documentos', q=q or None, pagina=pag.pagina - 1) }}">‹ Anterior</a>{% endif %}
+{% for n in pag.numeros %}{% if n is none %}<span class="mut">…</span>{% elif n == pag.pagina %}<span class="actual" aria-current="page">{{ n }}</span>{% else %}<a href="{{ url_for('documentos', q=q or None, pagina=n) }}">{{ n }}</a>{% endif %}{% endfor %}
+{% if pag.pagina < pag.paginas %}<a href="{{ url_for('documentos', q=q or None, pagina=pag.pagina + 1) }}">Siguiente ›</a>{% endif %}
+</span></nav>{% endif %}
+{% else %}<p class="mut">{{ 'No hay documentos que coincidan con la búsqueda.' if q else 'Aún no hay documentos. Importe su Excel o agregue uno.' }}</p>{% endif %}
+</div>{% endblock %}

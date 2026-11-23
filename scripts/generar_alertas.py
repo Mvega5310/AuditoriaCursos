@@ -11,20 +11,18 @@ Uso directo (prueba manual o Programador de tareas):
   Agregue --dry-run para NO enviar correos: genera el HTML en la carpeta salidas/
   y permite revisar el resultado antes de activar el envio real.
 """
-import smtplib
 import sys
 import logging
 from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
+import config
 from config import APP_URL
-from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
+from config import (DIAS_SEMANA, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
 import calendario
 import core
@@ -44,7 +42,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-ESTADOS = ("vencido", "critico", "alerta", "proximo", "normal")
+ESTADOS = ("vencido", "critico", "alerta", "proximo", "normal", "indefinido")
 
 
 def _nombre(r) -> str:
@@ -83,15 +81,21 @@ def consultar_faltantes(conn, empresa_id: int) -> list[dict]:
     return resultado
 
 
-def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict]:
+def consultar_vencimientos(conn, empresa_id: int, dias_limite: int,
+                           incluir_indefinidos: bool = False) -> list[dict]:
     """Documentos de la empresa ya vencidos o que vencen dentro de dias_limite dias.
-    Excluye empleados inactivos y documentos sin fecha de vencimiento."""
+    Excluye empleados inactivos y documentos sin fecha de vencimiento.
+
+    Los de vigencia indefinida (modalidad de pago unico: la entidad imprime una fecha, pero el curso no se
+    renueva) NUNCA generan alertas, asi que por defecto quedan fuera. El panel los pide con
+    incluir_indefinidos=True para mostrarlos con estado INDEFINIDO en vez de VENCIDO."""
     hasta = (hoy() + timedelta(days=dias_limite)).isoformat()
     # Un documento con avisar_dias aparece en todas las alertas desde N dias antes de vencer,
     # aunque quede fuera de la ventana del reporte.
     filas = conn.execute("""
         SELECT e.cedula, e.nombre, e.apellido, e.area, e.cargo,
-               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento, d.avisar_dias
+               t.categoria, t.nombre AS documento, d.referencia, d.fecha_vencimiento, d.avisar_dias,
+               d.vigencia_indefinida
         FROM documentos d
         JOIN tipos_documento t ON t.id = d.tipo_id
         LEFT JOIN empleados e  ON e.id = d.empleado_id
@@ -99,8 +103,10 @@ def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict
           AND d.fecha_vencimiento IS NOT NULL
           AND (d.fecha_vencimiento <= ? OR d.avisar_dias IS NOT NULL)
           AND (d.empleado_id IS NULL OR e.activo = 1)
+          {filtro_indefinidos}
         ORDER BY d.fecha_vencimiento ASC, e.apellido ASC, e.nombre ASC
-    """, (empresa_id, hasta)).fetchall()
+    """.replace("{filtro_indefinidos}", "" if incluir_indefinidos else "AND d.vigencia_indefinida = 0"),
+        (empresa_id, hasta)).fetchall()
 
     registros = []
     for r in filas:
@@ -108,6 +114,8 @@ def consultar_vencimientos(conn, empresa_id: int, dias_limite: int) -> list[dict
         if r["fecha_vencimiento"] > hasta and not (r["avisar_dias"] is not None and dias <= r["avisar_dias"]):
             continue        # fuera de la ventana y todavia sin entrar en su aviso propio
         clase, label = clasificar(dias)
+        if r["vigencia_indefinida"]:
+            clase, label = "indefinido", "INDEFINIDO"     # su fecha impresa se conserva, pero no vence
         es_empresa = r["cedula"] is None
         documento = r["documento"] + (f" ({r['referencia']})" if r["referencia"] else "")
         registros.append({
@@ -144,7 +152,7 @@ def configuracion_empresa(conn, empresa_id: int) -> dict:
 
 
 def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: list[dict] | None = None,
-                    dias: int | None = None) -> str:
+                    dias: int | None = None, baja_url: str | None = None) -> str:
     config = ALERTAS[tipo]
     dias = dias if dias is not None else ventana_alerta(tipo)
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_PATH.parent)), autoescape=True)
@@ -159,6 +167,7 @@ def renderizar_html(registros: list[dict], tipo: str, empresa: str, faltantes: l
         total_faltantes=sum(f["cantidad"] for f in (faltantes or [])),
         resumen=_calcular_resumen(registros),
         app_url=APP_URL,
+        baja_url=baja_url,
     )
 
 
@@ -169,6 +178,30 @@ def obtener_destinatarios(conn, empresa_id: int) -> list[str]:
     if not emails and RRHH_EMAIL:
         emails = [RRHH_EMAIL]
     return emails
+
+
+SALT_BAJA = "baja-avisos"
+
+
+def destinatarios(conn, empresa_id: int) -> list[dict]:
+    """Responsables activos CON su id, para poder firmar el enlace de baja de cada uno.
+    Si la empresa no tiene responsables, el correo de respaldo (RRHH_EMAIL) sin id: no es una fila de
+    `responsables`, asi que no lleva enlace de baja."""
+    filas = [{"id": r["id"], "email": r["email"]} for r in conn.execute(
+        "SELECT id, email FROM responsables WHERE empresa_id = ? AND activo = 1 ORDER BY id", (empresa_id,))]
+    if not filas and RRHH_EMAIL:
+        return [{"id": None, "email": RRHH_EMAIL}]
+    return filas
+
+
+def enlace_baja(responsable_id: int | None) -> str | None:
+    """URL firmada que da de baja UNICAMENTE a ese responsable: ni a los demas de su empresa, ni a otra empresa.
+    None si no hay fila que dar de baja, o si falta FLASK_SECRET_KEY (sin secreto no se puede firmar)."""
+    if responsable_id is None or not config.FLASK_SECRET_KEY:
+        return None
+    from itsdangerous import URLSafeTimedSerializer
+    token = URLSafeTimedSerializer(config.FLASK_SECRET_KEY).dumps(responsable_id, salt=SALT_BAJA)
+    return f"{APP_URL}/baja/{token}"
 
 
 def enviar_email(asunto: str, html_body: str, para: list[str], copia_oculta: list[str] | None = None) -> bool:
@@ -253,18 +286,29 @@ def ejecutar_alerta(tipo: str, dry_run: bool = False, db_path: Path | str = DB_P
                 log.info(f"[{emp['nombre']}] {len(registros)} registros, {len(faltantes)} personas con faltantes -> {destino.name} (no se envio correo)")
                 continue
 
-            para = obtener_destinatarios(conn, emp["id"])
-            if not para:
+            lista = destinatarios(conn, emp["id"])
+            if not lista:
                 log.error(f"[{emp['nombre']}] Sin destinatarios (agregue responsables o RRHH_EMAIL en .env).")
                 _registrar_log(conn, tipo, emp["id"], n_total, "", "sin_destinatario")
                 continue
 
+            para = [d["email"] for d in lista]
             log.info(f"[{emp['nombre']}] {len(registros)} registros, {len(faltantes)} personas con faltantes. Enviando a {', '.join(para)}...")
-            ok = enviar_email(asunto, html, para, [ADMIN_EMAIL] if ADMIN_EMAIL else None)
+            # UN correo por destinatario: cada uno lleva SU enlace de baja y no ve las direcciones de los demas.
+            # La copia al administrador (ADMIN_EMAIL) va solo en el primero, para no multiplicarla.
+            enviados, fallidos = [], []
+            for i, d in enumerate(lista):
+                cuerpo = renderizar_html(registros, tipo, emp["nombre"], faltantes, dias, enlace_baja(d["id"]))
+                cco = [ADMIN_EMAIL] if ADMIN_EMAIL and i == 0 else None
+                (enviados if enviar_email(asunto, cuerpo, [d["email"]], cco) else fallidos).append(d["email"])
+            contenido = f"{len(registros)} vencimientos, {sum(f['cantidad'] for f in faltantes)} sin registrar"
             _registrar_log(conn, tipo, emp["id"], n_total, ", ".join(para),
-                           "enviado" if ok else "error_envio")
-            if ok:
-                log.info(f"[{emp['nombre']}] Correo enviado.")
+                           "enviado" if enviados else "error_envio",
+                           contenido + (f"; sin entregar: {', '.join(fallidos)}" if fallidos and enviados else ""))
+            if not fallidos:
+                log.info(f"[{emp['nombre']}] Correo enviado a {len(enviados)} destinatario(s).")
+            elif enviados:
+                log.error(f"[{emp['nombre']}] Enviado a {len(enviados)}, fallo a: {', '.join(fallidos)}.")
             else:
                 log.error(f"[{emp['nombre']}] Fallo el envio del correo.")
     finally:

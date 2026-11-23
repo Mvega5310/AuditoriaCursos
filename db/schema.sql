@@ -78,6 +78,8 @@ CREATE TABLE IF NOT EXISTS documentos (
     fecha_emision      TEXT,
     fecha_vencimiento  TEXT,                    -- NULL = sin vencimiento
     no_aplica          INTEGER NOT NULL DEFAULT 0,   -- 1 = el documento no aplica a esta persona (cuenta como cumplido)
+    vigencia_indefinida INTEGER NOT NULL DEFAULT 0,  -- 1 = ESTE certificado no se renueva (modalidad de pago unico);
+                                                     --     se conserva la fecha impresa, pero no genera alertas
     avisar_dias        INTEGER,                 -- NULL = solo las ventanas normales; N = aparece en TODAS las alertas desde N dias antes
     archivo            TEXT    DEFAULT '',      -- ruta o enlace al soporte (PDF/foto)
     observaciones      TEXT    DEFAULT '',

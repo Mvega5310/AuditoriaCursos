@@ -92,6 +92,7 @@ tbody tr:hover td,tr:hover>td{background:#FAFCFF}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:24px}
 .kpi{background:rgba(255,255,255,.94);border:1px solid rgba(210,225,242,.8);border-radius:16px;padding:18px;box-shadow:0 10px 30px rgba(37,99,235,.07);color:var(--mut);font-size:.9rem}
 .kpi b{font-size:2rem;display:block;line-height:1.2;color:var(--tx)}
+.indefinido{color:#0F766E;font-weight:600}
 .vencido,.critico{color:var(--err);font-weight:600}.alerta{color:#B45309;font-weight:600}
 .info{display:flex;gap:16px;padding:18px 20px;border-radius:14px;background:linear-gradient(90deg,#EEF6FF,#F4F1FF);margin-top:20px}
 .info .icono-info{width:38px;height:38px;border-radius:50%;background:var(--grad-act);color:#fff;display:grid;place-items:center;flex:none}

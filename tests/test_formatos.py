@@ -1,5 +1,4 @@
 """Formatos reales de Excel: encabezados habituales en Colombia, fechas en texto/serial y mensajes de la web."""
-import io
 import sys
 from datetime import date, datetime
 from pathlib import Path
