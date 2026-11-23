@@ -139,6 +139,20 @@ python scripts/agregar_documento.py listar --sector salud
 - `--avisar-dias N` (o la columna **Avisar Dias** del Excel): el documento aparece en **todas** las alertas (diaria, semanal, etc.) desde N días antes de vencer, además de las ventanas normales.
 - Sin fecha de vencimiento el documento se guarda, pero no genera alertas.
 
+## Documentos: ver, agregar, editar y eliminar desde la web
+
+El menú **Documentos** lista todo lo de la empresa (con búsqueda por nombre, cédula o documento) y permite, sin rehacer el Excel:
+
+- **Editar** fechas, entidad, observaciones y «Avisar desde»; marcar **vigencia indefinida** o **no aplica**. Si cambia el vencimiento
+  (una renovación) la versión anterior queda en el historial, visible en la misma pantalla.
+- **Agregar** un documento a una persona existente o a la empresa. Si ya existe con esa referencia, lo actualiza en vez de duplicarlo.
+- **Marcar a una persona como retirada** (deja de generar avisos y de salir como faltante) o reactivarla.
+- **Eliminar** (solo administradores; borra también sus versiones anteriores).
+
+Las fechas pasan por las mismas reglas del importador: dd/mm/aaaa, vencimiento no anterior a la emisión y rechazo de vencimientos de hace más
+de 5 años como error de digitación (salvo vigencia indefinida). Cada documento se busca por su id **y** por la empresa del usuario: uno de
+otra empresa responde 404, igual que si no existiera.
+
 ## Cursos de vigencia indefinida (pago único)
 
 Un mismo curso puede venderse en dos modalidades: **renovable** (más barata, vence y hay que repetirla) o de
@@ -229,6 +243,7 @@ scripts/migrar_v1.py        migra la base anterior
 scripts/generar_alertas.py  alertas por empresa (--dry-run)
 scheduler.py         programa las alertas (Lun-Vie 07:00, etc.)
 templates/alerta_email.html
+edicion.py           validación de los formularios de documentos
 tests/test_flujo.py, tests/test_agregar.py, tests/test_matriz.py, tests/test_sheets.py
 ```
 

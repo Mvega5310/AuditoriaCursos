@@ -46,6 +46,7 @@
   <p class="grupo">Menú</p>
   {% set ep = request.endpoint %}
   <a href="{{ url_for('panel') }}" class="{{ 'act' if ep == 'panel' }}" {{ 'aria-current=page' if ep == 'panel' }}>{{ ico("home") }} Panel</a>
+  <a href="{{ url_for('documentos') }}" class="{{ 'act' if ep in ('documentos', 'documento_editar', 'documento_nuevo') }}" {{ 'aria-current=page' if ep in ('documentos', 'documento_editar', 'documento_nuevo') }}>{{ ico("doc") }} Documentos</a>
   <a href="{{ url_for('importar_vista') }}" class="{{ 'act' if ep == 'importar_vista' }}" {{ 'aria-current=page' if ep == 'importar_vista' }}>{{ ico("excel") }} Importar Excel</a>
   <a href="{{ url_for('avisos') }}" class="{{ 'act' if ep == 'avisos' }}" {{ 'aria-current=page' if ep == 'avisos' }}>{{ ico("ajustes") }} Avisos</a>
   <a href="{{ url_for('hoja_google') }}" class="{{ 'act' if ep == 'hoja_google' }}" {{ 'aria-current=page' if ep == 'hoja_google' }}>{{ ico("sheets" if sheets_habilitado else "check") }} {{ "Google Sheets" if sheets_habilitado else "Cursos controlados" }}</a>

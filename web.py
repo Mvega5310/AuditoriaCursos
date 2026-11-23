@@ -32,7 +32,8 @@ sys.path.insert(0, str(BASE_DIR / "scripts"))
 import config                                                  # noqa: E402
 import sheets                                                  # noqa: E402
 import correo                                                  # noqa: E402
-from core import conectar, hoy, inicializar_db, normalizar     # noqa: E402
+from core import clasificar, conectar, dias_restantes, hoy, inicializar_db, normalizar   # noqa: E402
+from edicion import validar_documento                          # noqa: E402
 
 log = logging.getLogger(__name__)
 
@@ -709,6 +710,177 @@ def create_app(overrides: dict | None = None) -> Flask:
                      (rid, g.usuario["empresa_id"]))
         conn.commit()
         return redirect(url_for("responsables"))
+
+    # ------------------------------------------------------------ documentos: ver, agregar, editar, eliminar
+    def _fecha_visible(iso):
+        return datetime.strptime(iso, "%Y-%m-%d").strftime("%d/%m/%Y") if iso else ""
+
+    def _titular(d):
+        if d["cedula"] is None:
+            return "EMPRESA"
+        return f"{d['apellido']}, {d['nombre']}" if d["apellido"] else d["nombre"]
+
+    def _estado_documento(d) -> tuple[str, str]:
+        """(texto, clase css) del documento tal como lo ve la lista."""
+        if d["no_aplica"]:
+            return "No aplica", "mut"
+        if d["vigencia_indefinida"]:
+            return "INDEFINIDO", "indefinido"
+        if not d["fecha_vencimiento"]:
+            return "Sin vencimiento", "mut"
+        dias = dias_restantes(d["fecha_vencimiento"])
+        clase, etiqueta = clasificar(dias)
+        return f"{etiqueta} ({'hace ' + str(-dias) if dias < 0 else dias} d)", clase
+
+    def _documento_de_la_empresa(did):
+        """El documento SOLO si es de la empresa del usuario. Si no, 404: no se revela que existe en otra."""
+        d = db().execute("""
+            SELECT d.id, d.empleado_id, d.referencia, d.entidad_emisora, d.fecha_emision, d.fecha_vencimiento,
+                   d.no_aplica, d.vigencia_indefinida, d.avisar_dias, d.observaciones,
+                   t.nombre AS documento, e.cedula, e.nombre, e.apellido, e.cargo, e.area, e.activo
+            FROM documentos d JOIN tipos_documento t ON t.id = d.tipo_id
+            LEFT JOIN empleados e ON e.id = d.empleado_id
+            WHERE d.id = ? AND d.empresa_id = ?""", (did, g.usuario["empresa_id"])).fetchone()
+        if d is None:
+            abort(404)
+        return d
+
+    @app.get("/documentos")
+    @login_requerido
+    def documentos():
+        q = request.args.get("q", "").strip()[:80]
+        buscar = normalizar(q)
+        filas = db().execute("""
+            SELECT d.id, d.referencia, d.fecha_vencimiento, d.no_aplica, d.vigencia_indefinida,
+                   t.nombre AS documento, e.cedula, e.nombre, e.apellido, e.cargo, e.area, e.activo
+            FROM documentos d JOIN tipos_documento t ON t.id = d.tipo_id
+            LEFT JOIN empleados e ON e.id = d.empleado_id
+            WHERE d.empresa_id = ? ORDER BY e.apellido, e.nombre, t.nombre""", (g.usuario["empresa_id"],)).fetchall()
+        items = []
+        for d in filas:
+            titular = _titular(d)
+            if buscar and buscar not in normalizar(f"{titular} {d['cedula'] or ''} {d['documento']} {d['referencia']}"):
+                continue
+            estado, clase = _estado_documento(d)
+            items.append({"id": d["id"], "titular": titular, "cedula": d["cedula"] or "—", "documento": d["documento"],
+                          "referencia": d["referencia"], "vence": _fecha_visible(d["fecha_vencimiento"]) or "—",
+                          "estado": estado, "clase": clase, "retirado": d["cedula"] is not None and not d["activo"]})
+        visibles, pag = _paginar(items, "pagina")
+        return render_template("documentos.html", items=visibles, pag=pag, q=q, total=len(filas))
+
+    @app.route("/documentos/nuevo", methods=["GET", "POST"])
+    @login_requerido
+    def documento_nuevo():
+        from agregar_documento import agregar
+        eid, conn = g.usuario["empresa_id"], db()
+        personas = conn.execute("""SELECT cedula, nombre, apellido, cargo, area FROM empleados
+                                   WHERE empresa_id = ? AND activo = 1 ORDER BY apellido, nombre""", (eid,)).fetchall()
+        sugeridos = [r["nombre"] for r in conn.execute(
+            "SELECT DISTINCT nombre FROM tipos_documento WHERE sector IN (?, 'general') ORDER BY nombre",
+            (g.usuario["sector"],))]
+
+        def formulario(estado=200, **extra):
+            return render_template("documento_form.html", nuevo=True, personas=personas, sugeridos=sugeridos,
+                                   v=extra.get("v", {}), **{k: x for k, x in extra.items() if k != "v"}), estado
+
+        if request.method != "POST":
+            return formulario()
+        v = {k: request.form.get(k, "").strip() for k in ("cedula", "documento", "referencia", "fecha_emision",
+                                                           "fecha_vencimiento", "avisar_dias", "entidad", "observaciones")}
+        v["vigencia_indefinida"] = bool(request.form.get("vigencia_indefinida"))
+        valores, errores = validar_documento(request.form)
+        if not v["documento"]:
+            errores.append("Escriba el nombre del documento o curso.")
+        persona = None
+        if v["cedula"]:
+            persona = next((p for p in personas if p["cedula"] == v["cedula"]), None)   # solo personas de ESTA empresa
+            if persona is None:
+                errores.append("Elija una persona de la lista.")
+        if errores:
+            for e in errores:
+                flash(e, "error")
+            return formulario(400, v=v)
+        campos = {"empresa": g.usuario["empresa"], "documento": v["documento"][:200], "referencia": v["referencia"][:100],
+                  "fecha_emision": v["fecha_emision"], "fecha_vencimiento": v["fecha_vencimiento"],
+                  "avisar_dias": v["avisar_dias"], "entidad": valores["entidad"], "observaciones": valores["observaciones"],
+                  "vigencia_indefinida": "indefinida" if valores["vigencia_indefinida"] else ""}
+        if persona:
+            campos.update(cedula=persona["cedula"], nombre=persona["nombre"], apellido=persona["apellido"],
+                          cargo=persona["cargo"], area=persona["area"])
+        res = agregar(campos, db_path=app.config["DB_PATH"], empresa_defecto=g.usuario["empresa"])
+        if res["errores"]:
+            for e in res["errores"]:
+                flash(e, "error")
+            return formulario(400, v=v)
+        flash("Documento actualizado: ya existía con esa referencia; la versión anterior quedó en el historial."
+              if res["actualizados"] else "Documento agregado.", "ok")
+        return redirect(url_for("documentos", q=v["documento"]))
+
+    @app.route("/documentos/<int:did>", methods=["GET", "POST"])
+    @login_requerido
+    def documento_editar(did):
+        d = _documento_de_la_empresa(did)
+        if request.method == "POST":
+            valores, errores = validar_documento(request.form)
+            if errores:
+                for e in errores:
+                    flash(e, "error")
+                v = {**{k: request.form.get(k, "").strip() for k in ("fecha_emision", "fecha_vencimiento", "avisar_dias",
+                                                                       "entidad", "observaciones")},
+                     "no_aplica": bool(request.form.get("no_aplica")),
+                     "vigencia_indefinida": bool(request.form.get("vigencia_indefinida"))}
+                return render_template("documento_form.html", nuevo=False, d=d, titular=_titular(d), v=v, historial=[]), 400
+            conn = db()
+            # Si cambia el vencimiento, el disparador de la base guarda la version anterior en el historial
+            conn.execute("""UPDATE documentos SET fecha_emision = ?, fecha_vencimiento = ?, no_aplica = ?,
+                                vigencia_indefinida = ?, avisar_dias = ?, entidad_emisora = ?, observaciones = ?,
+                                actualizado_en = ?
+                            WHERE id = ? AND empresa_id = ?""",
+                         (valores["fecha_emision"], valores["fecha_vencimiento"], valores["no_aplica"],
+                          valores["vigencia_indefinida"], valores["avisar_dias"], valores["entidad"],
+                          valores["observaciones"], hoy().isoformat(), did, g.usuario["empresa_id"]))
+            conn.commit()
+            flash("Documento actualizado.", "ok")
+            return redirect(url_for("documentos", q=d["cedula"] or d["documento"]))
+        v = {"fecha_emision": _fecha_visible(d["fecha_emision"]), "fecha_vencimiento": _fecha_visible(d["fecha_vencimiento"]),
+             "avisar_dias": "" if d["avisar_dias"] is None else str(d["avisar_dias"]), "entidad": d["entidad_emisora"] or "",
+             "observaciones": d["observaciones"] or "", "no_aplica": bool(d["no_aplica"]),
+             "vigencia_indefinida": bool(d["vigencia_indefinida"])}
+        historial = [{"emision": _fecha_visible(h["fecha_emision"]), "vence": _fecha_visible(h["fecha_vencimiento"]),
+                      "cuando": (h["registrado_en"] or "")[:10]}
+                     for h in db().execute("""SELECT fecha_emision, fecha_vencimiento, registrado_en
+                                              FROM documentos_historial WHERE documento_id = ? ORDER BY id DESC""", (did,))]
+        return render_template("documento_form.html", nuevo=False, d=d, titular=_titular(d), v=v, historial=historial)
+
+    @app.post("/documentos/<int:did>/eliminar")
+    @login_requerido
+    def documento_eliminar(did):
+        if g.usuario["rol"] != "admin":
+            abort(403)
+        d = _documento_de_la_empresa(did)
+        conn = db()
+        conn.execute("DELETE FROM documentos_historial WHERE documento_id = ?", (did,))
+        conn.execute("DELETE FROM documentos WHERE id = ? AND empresa_id = ?", (did, g.usuario["empresa_id"]))
+        conn.commit()
+        log.warning("Documento eliminado: empresa %s, usuario %s, documento %s (%s)",
+                    g.usuario["empresa_id"], g.usuario["id"], did, d["documento"])
+        flash("Documento eliminado.", "ok")
+        return redirect(url_for("documentos"))
+
+    @app.post("/documentos/<int:did>/persona")
+    @login_requerido
+    def documento_persona(did):
+        """Marca a la persona dueña del documento como retirada (deja de recibir avisos) o la reactiva."""
+        d = _documento_de_la_empresa(did)
+        if d["empleado_id"] is None:
+            abort(400, "Este documento es de la empresa, no de una persona.")
+        activo = 0 if request.form.get("accion") == "retirar" else 1
+        conn = db()
+        conn.execute("UPDATE empleados SET activo = ? WHERE id = ? AND empresa_id = ?",
+                     (activo, d["empleado_id"], g.usuario["empresa_id"]))
+        conn.commit()
+        flash("Persona marcada como retirada: ya no genera avisos." if not activo else "Persona reactivada.", "ok")
+        return redirect(url_for("documento_editar", did=did))
 
     # ------------------------------------------------------------ baja de avisos (sin iniciar sesion)
     def _responsable_de_token(token):
