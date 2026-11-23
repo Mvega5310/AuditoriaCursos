@@ -32,7 +32,6 @@ sys.path.insert(0, str(BASE_DIR / "scripts"))
 import config                                                  # noqa: E402
 import sheets                                                  # noqa: E402
 import correo                                                  # noqa: E402
-from catalogo import CATALOGO                                  # noqa: E402
 from core import conectar, hoy, inicializar_db, normalizar     # noqa: E402
 
 log = logging.getLogger(__name__)

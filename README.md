@@ -26,6 +26,10 @@ python scheduler.py                                     # alertas automáticas
 
 Pruebas: `pip install -r requirements-dev.txt` y `python -m pytest -q`.
 
+**CI** (`.github/workflows/ci.yml`): en cada PR y en `main` corre las pruebas sobre SQLite y sobre Postgres 16, `ruff` (solo errores reales,
+ver `ruff.toml`) y `pip-audit` (falla si una dependencia fijada tiene una vulnerabilidad conocida). Dependabot propone las actualizaciones cada semana.
+Se usa Python 3.12, la versión del `Dockerfile`: `pandas==2.2.2` no publica ruedas para 3.13.
+
 ## Si ya usaba la versión anterior (una sola empresa)
 
 ```bash

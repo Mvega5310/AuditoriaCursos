@@ -15,7 +15,7 @@ import config                    # noqa: E402
 import core                      # noqa: E402
 import sheets                    # noqa: E402
 import web                       # noqa: E402
-from test_web import CLAVE, _csrf, registrar  # noqa: E402
+from test_web import _csrf, registrar  # noqa: E402
 
 SHEET_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
 URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit#gid=0"

@@ -11,7 +11,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "scripts"))
 
-import config                    # noqa: E402
 import core                      # noqa: E402
 import generar_alertas           # noqa: E402
 from test_web import app, registrar, subir, _csrf   # noqa: E402,F401

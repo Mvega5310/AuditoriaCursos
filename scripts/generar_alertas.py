@@ -11,12 +11,9 @@ Uso directo (prueba manual o Programador de tareas):
   Agregue --dry-run para NO enviar correos: genera el HTML en la carpeta salidas/
   y permite revisar el resultado antes de activar el envio real.
 """
-import smtplib
 import sys
 import logging
 from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
@@ -25,7 +22,7 @@ sys.path.insert(0, str(BASE_DIR))
 
 import config
 from config import APP_URL
-from config import (DIAS_SEMANA, GMAIL_USER, GMAIL_APP_PASSWORD, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
+from config import (DIAS_SEMANA, RRHH_EMAIL, ADMIN_EMAIL, DB_PATH, LOG_PATH,
                     SALIDAS_DIR, TEMPLATE_PATH, ALERTAS, CATEGORIAS, ANTICIPACION_DEFECTO, ventana_alerta)
 import calendario
 import core
